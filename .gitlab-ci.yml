@@ -1,0 +1,100 @@
+stages:
+  - build
+  - sign
+  - package
+
+cache:
+  key: "$CI_PROJECT_PATH"
+  paths:
+    - .govendor
+    - go
+
+before_script:
+  # Creating release path
+  - mkdir release
+  # Go build environment variables
+  - export GOROOT=$PWD/go
+  - export GOPATH=$PWD/gopath
+  - export PATH=$PATH:$GOROOT/bin:$GOPATH/bin
+  # Creating govendor cache folder
+  - mkdir -p $PWD/.govendor
+  - rm -rf $GOPATH
+  - mkdir -p $GOPATH/.cache && ln -s $PWD/.govendor $GOPATH/.cache/govendor
+  # Downloading go if not installed yet
+  - apt-get update -y && apt-get install make git tar -y
+  - "([[ ! $(go version) =~ \"go1\\.8\" ]] && apt-get install wget -y && wget https://storage.googleapis.com/golang/go1.8.1.linux-amd64.tar.gz && tar -C $PWD -xvzf go1.8.1.linux-amd64.tar.gz) || echo \"Expected Go toolset available in cache\""
+  # Copying the packet-forwarder in the gopath
+  - mkdir -p $GOPATH/src/github.com/TheThingsNetwork
+  - ln -s $PWD $GOPATH/src/github.com/TheThingsNetwork/packet_forwarder
+  # Build environment variables
+  - export CI_BUILD_DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+  - echo "date $CI_BUILD_DATE" >> release/info
+  - echo "commit $CI_BUILD_DATE" >> release/info
+  # Downloading dependencies
+  - pushd $GOPATH/src/github.com/TheThingsNetwork/packet_forwarder
+  - make dev-deps
+  - make deps
+  - popd
+
+multitech-conduit-pktfwd:
+  stage: build
+  image: registry.gitlab.com/thethingsindustries/packet-forwarder/multitech-toolchain
+  script:
+    # Remove the toolchain's CFLAGS
+    - "sed 's/.*CFLAGS.*//g' /opt/mlinux/3.2.0/environment-setup-arm926ejste-mlinux-linux-gnueabi  -i.bak"
+    # Enable mLinux toolchain
+    - sdk_enable_file=$(ls /opt/mlinux/*/*setup*)
+    - source $sdk_enable_file
+    # Go to packet forwarder file
+    - pushd $GOPATH/src/github.com/TheThingsNetwork/packet_forwarder
+    - GOOS=linux GOARM=5 GOARCH=arm make build
+    - pushd release
+    - binary_file=$(ls packet*)
+    - ./../scripts/multitech/create-multitech-package.sh $binary_file
+    - popd
+    - popd
+  artifacts:
+    paths:
+      - release/
+
+kerlink-iot-station-pktfwd:
+  stage: build
+  image: registry.gitlab.com/thethingsindustries/packet-forwarder/klk-toolchain
+  script:
+    - pushd $GOPATH/src/github.com/TheThingsNetwork/packet_forwarder
+    - ./scripts/kerlink/build-kerlink.sh /opt
+    - cp scripts/kerlink/create-kerlink-package.sh release
+    - popd
+  artifacts:
+    paths:
+      - release/
+
+sign:
+  before_script: []
+  only:
+    - develop@thethingsnetwork/packet_forwarder
+    - master@thethingsnetwork/packet_forwarder
+  stage: sign
+  image: golang:latest
+  script:
+    - pushd release
+    - shasum -a 256 $(ls) > checksums
+    - gpg --no-tty --batch --import /gpg/signing.ci.gpg-key
+    - gpg --no-tty --batch --no-use-agent --passphrase $GPG_PASSPHRASE --detach-sign checksums
+    - popd
+  artifacts:
+    paths:
+      - release/checksums
+      - release/checksums.sig
+
+azure-binaries:
+  before_script: []
+  only:
+    - develop@thethingsnetwork/packet_forwarder
+    - master@thethingsnetwork/packet_forwarder
+  stage: package
+  image: registry.gitlab.com/thethingsindustries/upload
+  script:
+    - cd release
+    - export STORAGE_CONTAINER=release STORAGE_KEY=$AZURE_STORAGE_KEY ZIP=true TGZ=true PREFIX=$CI_BUILD_REF_NAME/
+    - upload *
