@@ -96,5 +96,5 @@ azure-binaries:
   image: registry.gitlab.com/thethingsindustries/upload
   script:
     - cd release
-    - export STORAGE_CONTAINER=release STORAGE_KEY=$AZURE_STORAGE_KEY ZIP=true TGZ=true PREFIX=$CI_BUILD_REF_NAME/
+    - export STORAGE_CONTAINER=packet-forwarder STORAGE_KEY=$AZURE_STORAGE_KEY ZIP=true TGZ=true PREFIX=$CI_BUILD_REF_NAME/
     - upload *
