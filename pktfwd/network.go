@@ -205,12 +205,16 @@ func (c *TTNClient) getRouterClient(ctx log.Interface, ttnConfig TTNConfig) (rou
 	if ttnConfig.Router == "" {
 		gw, err := c.account.FindGateway(c.GatewayID())
 		if err != nil {
-			return nil, err
+			return nil, errors.Wrap(err, "Couldn't fetch the gateway information from the account server")
 		}
 
-		routerConn, err = connectToRouter(c.ctx, discoveryClient, gw.Router.ID)
-		if err != nil {
-			ctx.WithError(err).WithField("RouterID", gw.Router.ID).Warn("Couldn't connect to main router - trying to connect to fallback routers")
+		if gw.Router.ID != "" {
+			routerConn, err = connectToRouter(c.ctx.WithField("RouterID", gw.Router.ID), discoveryClient, gw.Router.ID)
+		}
+		if gw.Router.ID == "" || err != nil {
+			if err != nil {
+				ctx.WithError(err).WithField("RouterID", gw.Router.ID).Warn("Couldn't connect to main router - trying to connect to fallback routers")
+			}
 			fallbackRouters := gw.FallbackRouters
 			if len(fallbackRouters) == 0 {
 				ctx.Warn("No fallback routers in memory for this gateway - loading all routers")
@@ -221,12 +225,12 @@ func (c *TTNClient) getRouterClient(ctx log.Interface, ttnConfig TTNConfig) (rou
 				}
 				routerConn, err = c.getLowestLatencyRouterFromAnnouncements(discoveryClient, routers)
 				if err != nil {
-					return nil, err
+					return nil, errors.Wrap(err, "Couldn't figure out the lowest latency router")
 				}
 			} else {
 				routerConn, err = c.getLowestLatencyRouter(discoveryClient, fallbackRouters)
 				if err != nil {
-					return nil, err
+					return nil, errors.Wrap(err, "Couldn't figure out the lowest latency router")
 				}
 			}
 			defer func() {
@@ -237,7 +241,7 @@ func (c *TTNClient) getRouterClient(ctx log.Interface, ttnConfig TTNConfig) (rou
 	} else {
 		routerConn, err = connectToRouter(ctx, discoveryClient, ttnConfig.Router)
 		if err != nil {
-			return nil, err
+			return nil, errors.Wrap(err, "Couldn't connect to user-specified router")
 		}
 		ctx.Info("Connected to router")
 	}
