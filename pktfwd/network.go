@@ -225,12 +225,12 @@ func (c *TTNClient) getRouterClient(ctx log.Interface, ttnConfig TTNConfig) (rou
 				}
 				routerConn, err = c.getLowestLatencyRouterFromAnnouncements(discoveryClient, routers)
 				if err != nil {
-					return nil, errors.Wrap(err, "couldn't figure out the latest latency router")
+					return nil, errors.Wrap(err, "Couldn't figure out the lowest latency router")
 				}
 			} else {
 				routerConn, err = c.getLowestLatencyRouter(discoveryClient, fallbackRouters)
 				if err != nil {
-					return nil, errors.Wrap(err, "couldn't figure out the latest latency router")
+					return nil, errors.Wrap(err, "Couldn't figure out the lowest latency router")
 				}
 			}
 			defer func() {
@@ -241,7 +241,7 @@ func (c *TTNClient) getRouterClient(ctx log.Interface, ttnConfig TTNConfig) (rou
 	} else {
 		routerConn, err = connectToRouter(ctx, discoveryClient, ttnConfig.Router)
 		if err != nil {
-			return nil, errors.Wrap(err, "couldn't connect to user-specified router")
+			return nil, errors.Wrap(err, "Couldn't connect to user-specified router")
 		}
 		ctx.Info("Connected to router")
 	}
