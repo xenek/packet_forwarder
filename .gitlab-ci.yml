@@ -22,7 +22,7 @@ before_script:
   - mkdir -p $GOPATH/.cache && ln -s $PWD/.govendor $GOPATH/.cache/govendor
   # Downloading go if not installed yet
   - apt-get update -y && apt-get install make git tar -y
-  - "([[ ! $(go version) =~ \"go1\\.8\" ]] && apt-get install wget -y && wget https://storage.googleapis.com/golang/go1.8.1.linux-amd64.tar.gz && tar -C $PWD -xvzf go1.8.1.linux-amd64.tar.gz) || echo \"Expected Go toolset available in cache\""
+  - "([[ ! $(go version) =~ \"version\" ]] && apt-get install wget -y && wget https://storage.googleapis.com/golang/go1.8.1.linux-amd64.tar.gz && tar -C $PWD -xvzf go1.8.1.linux-amd64.tar.gz) || echo \"Expected Go toolset available in cache\""
   # Copying the packet-forwarder in the gopath
   - mkdir -p $GOPATH/src/github.com/TheThingsNetwork
   - ln -s $PWD $GOPATH/src/github.com/TheThingsNetwork/packet_forwarder
@@ -35,6 +35,14 @@ before_script:
   - make dev-deps
   - make deps
   - popd
+
+after_script:
+  - cp -r release release_files
+  - pushd release_files
+  - tar -cvzf $CI_JOB_NAME.tar.gz *
+  - popd
+  - rm -rf release/*
+  - cp release_files/$CI_JOB_NAME.tar.gz release
 
 multitech-conduit-pktfwd:
   stage: build

@@ -4,7 +4,7 @@
 
 ## Download and install
 
-1. Download the [Multitech Conduit package](https://ttnreleases.blob.core.windows.net/packet_forwarder/master/multitech-conduit-pktfwd.zip) of the packet forwarder.
+1. Download the [Multitech Conduit package](https://ttnreleases.blob.core.windows.net/packet_forwarder/master/multitech-conduit-pktfwd.tar.gz) of the packet forwarder.
 
 2. In the archive, you will find an `.ipk` file, as well as the executable binary. Unless you want to test the packet forwarder before installing it, you won't need to use the binary. Copy the `.ipk` file on the Multitech mConduit, using either a USB stick or through the network.
 

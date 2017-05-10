@@ -34,7 +34,7 @@ This section covers permanent installation of the TTN Packet Forwarder on a Kerl
 
 ### Packaging the TTN Packet Forwarder
 
-Download the [Kerlink build](https://ttnreleases.blob.core.windows.net/packet-forwarder/master/kerlink-iot-station-pktfwd.zip) of the packet forwarder. Execute the `create-kerlink-package.sh` script with the binary inside as an argument:
+Download the [Kerlink build](https://ttnreleases.blob.core.windows.net/packet-forwarder/master/kerlink-iot-station-pktfwd.tar.gz) of the packet forwarder. Execute the `create-kerlink-package.sh` script with the binary inside as an argument:
 
 ```bash
 $ ./create-kerlink-package.sh packet-forwarder
