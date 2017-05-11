@@ -40,9 +40,11 @@ type Manager struct {
 
 func NewManager(ctx log.Interface, conf util.Config, netClient NetworkClient, gpsPath string, runConfig TTNConfig) Manager {
 	isGPS := gpsPath != ""
-	statusMgr := NewStatusManager(ctx, netClient.FrequencyPlan(), runConfig.GatewayDescription, isGPS)
+	statusMgr := NewStatusManager(ctx, netClient.FrequencyPlan(), runConfig.GatewayDescription, isGPS, netClient.DefaultLocation())
+
 	bootTimeSetters := NewMultipleBootTimeSetter()
 	bootTimeSetters.Add(statusMgr)
+
 	return Manager{
 		ctx:             ctx,
 		conf:            conf,

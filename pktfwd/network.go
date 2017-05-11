@@ -33,6 +33,7 @@ type TTNConfig struct {
 }
 
 type TTNClient struct {
+	antennaLocation   *account.AntennaLocation
 	currentRouterConn *grpc.ClientConn
 	ctx               log.Interface
 	uplinkStream      router.UplinkStream
@@ -61,6 +62,7 @@ type NetworkClient interface {
 	Downlinks() <-chan *router.DownlinkMessage
 	GatewayID() string
 	Ping() (time.Duration, error)
+	DefaultLocation() *account.AntennaLocation
 	Stop()
 }
 
@@ -93,6 +95,10 @@ func connectToRouter(ctx log.Interface, discoveryClient discovery.Client, router
 
 	ctx.Info("Connecting to router...")
 	return announcement.Dial()
+}
+
+func (c *TTNClient) DefaultLocation() *account.AntennaLocation {
+	return c.antennaLocation
 }
 
 func (c *TTNClient) FrequencyPlan() string {
@@ -291,6 +297,7 @@ func (c *TTNClient) fetchAccountServerInfo(gatewayID string) error {
 	if err != nil {
 		return errors.Wrap(err, "Account server error")
 	}
+	c.antennaLocation = gw.AntennaLocation
 	c.token = gw.Token.AccessToken
 	c.frequencyPlan = gw.FrequencyPlan
 	return nil

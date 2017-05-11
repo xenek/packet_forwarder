@@ -8,6 +8,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/TheThingsNetwork/go-account-lib/account"
 	"github.com/TheThingsNetwork/go-utils/log"
 	"github.com/TheThingsNetwork/packet_forwarder/util"
 	"github.com/TheThingsNetwork/packet_forwarder/wrapper"
@@ -26,10 +27,14 @@ type StatusManager interface {
 	GenerateStatus(rtt time.Duration) (*gateway.Status, error)
 }
 
-func NewStatusManager(ctx log.Interface, frequencyPlan string, gatewayDescription string, isGPS bool) StatusManager {
+func NewStatusManager(ctx log.Interface, frequencyPlan string, gatewayDescription string, isGPSChip bool, antennaLocation *account.AntennaLocation) StatusManager {
+	if antennaLocation == nil {
+		ctx.Warn("Antenna location unavailable from the account server")
+	}
 	return &statusManager{
+		antennaLocation:    antennaLocation,
 		ctx:                ctx,
-		isGPS:              isGPS,
+		isGPSChip:          isGPSChip,
 		rxIn:               0,
 		rxOk:               0,
 		txIn:               0,
@@ -40,8 +45,9 @@ func NewStatusManager(ctx log.Interface, frequencyPlan string, gatewayDescriptio
 }
 
 type statusManager struct {
+	antennaLocation    *account.AntennaLocation
 	ctx                log.Interface
-	isGPS              bool
+	isGPSChip          bool
 	rxIn               uint32
 	rxOk               uint32
 	txIn               uint32
@@ -137,18 +143,33 @@ func (s *statusManager) GenerateStatus(rtt time.Duration) (*gateway.Status, erro
 		Os:           osInfo,
 	}
 
-	if s.isGPS { // GPS enabled
-		gpsCoordinates, err := wrapper.GetGPSCoordinates()
-		if err != nil {
-			s.ctx.WithError(err).Warn("Unable to retrieve GPS coordinates")
+	var coordinates *gateway.GPSMetadata
+	if s.antennaLocation != nil { // Antenna location accessible from the account server
+		if s.antennaLocation.Latitude != nil {
+			coordinates.Latitude = float32(*s.antennaLocation.Latitude)
 		}
-
-		status.Gps = &gateway.GPSMetadata{
-			Latitude:  float32(gpsCoordinates.Latitude),
-			Longitude: float32(gpsCoordinates.Longitude),
-			Altitude:  int32(gpsCoordinates.Altitude),
+		if s.antennaLocation.Longitude != nil {
+			coordinates.Longitude = float32(*s.antennaLocation.Longitude)
+		}
+		if s.antennaLocation.Altitude != nil {
+			coordinates.Altitude = int32(*s.antennaLocation.Altitude)
 		}
 	}
+
+	if s.isGPSChip { // GPS chip available
+		gpsChipCoordinates, err := wrapper.GetGPSCoordinates()
+		if err != nil {
+			s.ctx.WithError(err).Warn("Unable to retrieve GPS coordinates from the GPS hardware")
+		} else {
+			coordinates = &gateway.GPSMetadata{
+				Latitude:  float32(gpsChipCoordinates.Latitude),
+				Longitude: float32(gpsChipCoordinates.Longitude),
+				Altitude:  int32(gpsChipCoordinates.Altitude),
+			}
+		}
+	}
+
+	status.Gps = coordinates
 
 	return status, nil
 }
