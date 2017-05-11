@@ -489,6 +489,12 @@
 			"revisionTime": "2017-02-17T16:38:17Z"
 		},
 		{
+			"checksumSHA1": "dyI8tS2bXHlHpPIp6VGZ/HXKyJQ=",
+			"path": "github.com/stianeikeland/go-rpio",
+			"revision": "896db2ee1c7f95240dd6a09e56edf9cece107a34",
+			"revisionTime": "2015-12-08T00:50:14Z"
+		},
+		{
 			"checksumSHA1": "ZaU56svwLgiJD0y8JOB3+/mpYBA=",
 			"path": "golang.org/x/crypto/ssh/terminal",
 			"revision": "c7af5bf2638a1164f2eb5467c39c6cffbd13a02e",
