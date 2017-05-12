@@ -5,11 +5,13 @@
 Before installing the TTN Packet Forwarder, we recommend **updating the Station to the latest firmware available**.
 
 + [Download and test the TTN Packet Forwarder](#download-test)
-+ [Install the TTN Packet Forwardeer](#install)
++ [Install the TTN Packet Forwarder](#install)
 + [Build the TTN Packet Forwarder](#build)
 + [Troubleshooting](#troubleshooting)
 
 ## <a name="download-test"></a>Download and test the TTN Packet Forwarder
+
+*Note: Before installing the new packet forwarder, make sure you removed any other packet forwarder installed on your Kerlink IoT Station. If you don't have any important files stored on the disk, the safest way to make sure of that is to update the Station to the latest firmware available, which will reset the file system in the process.*
 
 1. Download the [Kerlink build](https://ttnreleases.blob.core.windows.net/packet_forwarder/master/kerlink-iot-station-pktfwd.zip) of the packet forwarder.
 

@@ -388,6 +388,9 @@ func (c *TTNClient) SendStatus(status gateway.Status) error {
 		"Load15":            status.GetOs().GetLoad_15(),
 		"CpuPercentage":     status.GetOs().GetCpuPercentage(),
 		"MemoryPercentage":  status.GetOs().GetMemoryPercentage(),
+		"Latitude":          status.GetGps().GetLatitude(),
+		"Longitude":         status.GetGps().GetLongitude(),
+		"Altitude":          status.GetGps().GetAltitude(),
 	}).Info("Sending status to the network server")
 	err = c.statusStream.Send(&status)
 	if err != nil {
