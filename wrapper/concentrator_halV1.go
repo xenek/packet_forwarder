@@ -277,17 +277,17 @@ func SetFSKChannel(ctx log.Interface, fskChan util.ChannelConf) error {
 	case val > 0 && val <= 7800:
 		cFSKChan.bandwidth = loraChannelBandwidths[7800]
 	case val > 7800 && val <= 15600:
-		cFSKChan.bandwidth = loraChannelBandwidths[7800]
+		cFSKChan.bandwidth = loraChannelBandwidths[15600]
 	case val > 15600 && val <= 31200:
-		cFSKChan.bandwidth = loraChannelBandwidths[7800]
+		cFSKChan.bandwidth = loraChannelBandwidths[31200]
 	case val > 31200 && val <= 62500:
-		cFSKChan.bandwidth = loraChannelBandwidths[7800]
+		cFSKChan.bandwidth = loraChannelBandwidths[62500]
 	case val > 62500 && val <= 125000:
-		cFSKChan.bandwidth = loraChannelBandwidths[7800]
+		cFSKChan.bandwidth = loraChannelBandwidths[125000]
 	case val > 125000 && val <= 250000:
-		cFSKChan.bandwidth = loraChannelBandwidths[7800]
+		cFSKChan.bandwidth = loraChannelBandwidths[250000]
 	case val > 250000 && val <= 500000:
-		cFSKChan.bandwidth = loraChannelBandwidths[7800]
+		cFSKChan.bandwidth = loraChannelBandwidths[500000]
 	}
 
 	if C.lgw_rxif_setconf(9, cFSKChan) != C.LGW_HAL_SUCCESS {

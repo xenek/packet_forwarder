@@ -143,7 +143,7 @@ func (s *statusManager) GenerateStatus(rtt time.Duration) (*gateway.Status, erro
 		Os:           osInfo,
 	}
 
-	var coordinates *gateway.GPSMetadata
+	coordinates := new(gateway.GPSMetadata)
 	if s.antennaLocation != nil { // Antenna location accessible from the account server
 		if s.antennaLocation.Latitude != nil {
 			coordinates.Latitude = float32(*s.antennaLocation.Latitude)
