@@ -26,5 +26,5 @@ func ResetPin(pinNumber int) error {
 	pin.Low()
 	time.Sleep(gpioTimeMargin)
 
-	return errors.Wrap(err, "couldn't close GPIO access")
+	return errors.Wrap(rpio.Close(), "couldn't close GPIO access")
 }
