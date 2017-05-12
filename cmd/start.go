@@ -16,7 +16,7 @@ import (
 )
 
 // standardDownlinkSendMargin is the time we send a TX packet to the concentrator before its sending time.
-const standardDownlinkSendMargin = 20
+const standardDownlinkSendMargin = 100
 
 // downlinksMargin is specified at build. If it contains a numeric value, it is used as the number of
 // milliseconds of time margin. If no numeric value can be parsed, we use standardTimeMargin.
