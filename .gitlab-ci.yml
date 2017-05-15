@@ -46,7 +46,7 @@ after_script:
 
 multitech-conduit-pktfwd:
   stage: build
-  image: registry.gitlab.com/thethingsindustries/packet-forwarder/multitech-toolchain
+  image: registry.gitlab.com/thethingsnetwork/packet_forwarder/multitech-toolchain
   script:
     # Remove the toolchain's CFLAGS
     - "sed 's/.*CFLAGS.*//g' /opt/mlinux/3.2.0/environment-setup-arm926ejste-mlinux-linux-gnueabi  -i.bak"
@@ -67,7 +67,7 @@ multitech-conduit-pktfwd:
 
 kerlink-iot-station-pktfwd:
   stage: build
-  image: registry.gitlab.com/thethingsindustries/packet-forwarder/klk-toolchain
+  image: registry.gitlab.com/thethingsnetwork/packet_forwarder/klk-toolchain
   script:
     - pushd $GOPATH/src/github.com/TheThingsNetwork/packet_forwarder
     - ./scripts/kerlink/build-kerlink.sh /opt
