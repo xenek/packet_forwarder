@@ -5,15 +5,17 @@
 Before installing the TTN Packet Forwarder, we recommend **updating the Station to the latest firmware available**.
 
 + [Download and test the TTN Packet Forwarder](#download-test)
-+ [Install the TTN Packet Forwardeer](#install)
++ [Install the TTN Packet Forwarder](#install)
 + [Build the TTN Packet Forwarder](#build)
 + [Troubleshooting](#troubleshooting)
 
 ## <a name="download-test"></a>Download and test the TTN Packet Forwarder
 
+*Note: Before installing the new packet forwarder, make sure you removed any other packet forwarder installed on your Kerlink IoT Station. If you don't have any important files stored on the disk, the safest way to make sure of that is to update the Station to the latest firmware available, which will reset the file system in the process.*
+
 1. Download the [Kerlink build](https://ttnreleases.blob.core.windows.net/packet_forwarder/master/kerlink-iot-station-pktfwd.zip) of the packet forwarder.
 
-2. In the folder, you will find several files: a `create-kerlink-package.sh` script and a binary file, that we will call `packet-forwarder`.
+2. In the folder, you will find several files: a `create-package.sh` script and a binary file, that we will call `packet-forwarder`.
 
 The binary is sufficient for a testing use - if you wish to try the TTN packet forwarder, just copy the binary on the Station, and execute:
 
@@ -34,19 +36,19 @@ This section covers permanent installation of the TTN Packet Forwarder on a Kerl
 
 ### Packaging the TTN Packet Forwarder
 
-Download the [Kerlink build](https://ttnreleases.blob.core.windows.net/packet-forwarder/master/kerlink-iot-station-pktfwd.zip) of the packet forwarder. Execute the `create-kerlink-package.sh` script with the binary inside as an argument:
+Download the [Kerlink build](https://ttnreleases.blob.core.windows.net/packet-forwarder/master/kerlink-iot-station-pktfwd.tar.gz) of the packet forwarder. Execute the `create-package.sh` script with the binary inside as an argument:
 
 ```bash
-$ ./create-kerlink-package.sh packet-forwarder
+$ ./create-package.sh packet-forwarder
 [...]
 # The script will ask you several questions to configure the packet forwarder.
-./create-kerlink-package.sh: Kerlink DOTA package complete.
+./create-package.sh: Kerlink DOTA package complete.
 ```
 
-A `kerlink-release` folder will appear in the folder you are in:
+A `kerlink-release-<id>` folder will appear in the folder you are in:
 
 ```bash
-$ cd kerlink-release && tree
+$ cd kerlink-release-<id> && tree
 .
 ├── dota_ttn-pkt-fwd.tar.gz
 ├── INSTALL.md

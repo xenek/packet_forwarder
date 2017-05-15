@@ -3,7 +3,6 @@
 package cmd
 
 import (
-	"fmt"
 	"os"
 
 	"github.com/TheThingsNetwork/packet_forwarder/util"
@@ -21,10 +20,6 @@ The first argument is used as the storage location to the configuration file. If
 
 	Run: func(cmd *cobra.Command, args []string) {
 		ctx := util.GetLogger()
-		filePath := fmt.Sprintf("%s/.pktfwd.yml", os.Getenv("HOME"))
-		if len(args) > 0 {
-			filePath = args[0]
-		}
 
 		ctx.Info("If you haven't registered your gateway yet, you can register it either with the console, or with `ttnctl`.")
 
@@ -62,14 +57,14 @@ The first argument is used as the storage location to the configuration file. If
 			util.GetLogger().WithError(err).Fatal("Failed to generate YAML")
 		}
 
-		f, err := os.Create(filePath)
+		f, err := os.Create(cfgFile)
 		if err != nil {
 			util.GetLogger().WithError(err).Fatal("Failed to create file")
 		}
 		defer f.Close()
 
 		f.Write(output)
-		ctx.WithField("ConfigFilePath", filePath).Info("New configuration file saved")
+		ctx.WithField("ConfigFilePath", cfgFile).Info("New configuration file saved")
 	},
 }
 

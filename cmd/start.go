@@ -16,7 +16,7 @@ import (
 )
 
 // standardDownlinkSendMargin is the time we send a TX packet to the concentrator before its sending time.
-const standardDownlinkSendMargin = 20
+const standardDownlinkSendMargin = 100
 
 // downlinksMargin is specified at build. If it contains a numeric value, it is used as the number of
 // milliseconds of time margin. If no numeric value can be parsed, we use standardTimeMargin.
@@ -52,6 +52,13 @@ var startCmd = &cobra.Command{
 			ctx.WithField("File", traceFilename).Info("Trace writing active for this run")
 		}
 
+		if pin := config.GetInt("reset-pin"); pin != 0 {
+			ctx.WithField("ResetPin", pin).Info("Reset pin specified, resetting concentrator...")
+			if err := pktfwd.ResetPin(pin); err != nil {
+				ctx.WithError(err).Fatal("Couldn't reset pin")
+			}
+		}
+
 		ttnConfig := &pktfwd.TTNConfig{
 			ID:                  config.GetString("id"),
 			Key:                 config.GetString("key"),
@@ -83,6 +90,7 @@ func init() {
 	startCmd.PersistentFlags().String("gps-path", "", "The file system path to the GPS interface, if a GPS is available (example: /dev/nmea)")
 	startCmd.PersistentFlags().Int64("downlink-send-margin", getDefaultDownlinkSendMargin(), "The margin, in milliseconds, between a downlink is sent to a concentrator and it is being sent by the concentrator")
 	startCmd.PersistentFlags().String("run-trace", "", "File to which write the runtime trace of the packet forwarder. Can later be read with `go tool trace <trace_file>`.")
+	startCmd.PersistentFlags().Int("reset-pin", 0, "GPIO pin associated to the reset pin of the board")
 	startCmd.PersistentFlags().BoolP("verbose", "v", false, "Show debug logs")
 
 	viper.BindPFlags(startCmd.PersistentFlags())

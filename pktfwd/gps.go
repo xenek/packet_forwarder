@@ -18,7 +18,7 @@ import (
 // tries to activate it.
 func enableGPS(ctx log.Interface, gpsPath string) (err error) {
 	if gpsPath == "" {
-		ctx.Warn("No GPS configured, ignoring")
+		ctx.Warn("No GPS chip configured, ignoring")
 		return nil
 	}
 

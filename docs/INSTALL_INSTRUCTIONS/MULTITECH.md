@@ -4,11 +4,20 @@
 
 ## Download and install
 
-1. Download the [Multitech Conduit package](https://ttnreleases.blob.core.windows.net/packet_forwarder/master/multitech-conduit-pktfwd.zip) of the packet forwarder.
+*Note: Before installing the new packet forwarder, make sure you removed any other packet forwarder installed on your Multitech Conduit.*
 
-2. In the archive, you will find an `.ipk` file, as well as the executable binary. Unless you want to test the packet forwarder before installing it, you won't need to use the binary. Copy the `.ipk` file on the Multitech mConduit, using either a USB stick or through the network.
+1. Download the [Multitech Conduit package](https://ttnreleases.blob.core.windows.net/packet_forwarder/master/multitech-conduit-pktfwd.tar.gz) of the packet forwarder.
 
-3. Install the package, configure the packet forwarder, then start it:
+2. In the archive, you will find an `create-package.sh` file, a `multitech-installer.sh`, as well as the executable binary. Execute the `create-package.sh` file, with the binary as a first argument:
+
+```bash
+$ ./create-package.sh <packet-forwarder-binary>
+[...]
+# Following the instructions of the wizard
+./create-package.sh: package available at ttn-pkt-fwd.ipk
+```
+
+3. Copy the package on the Multitech Conduit, using either a USB key or `scp` if you have an SSH connection to the Multitech Conduit. Install the package, configure the packet forwarder, then start it:
 
 ```bash
 $ opkg install ttn-pkt-fwd.ipk
@@ -63,12 +72,13 @@ The binary will then be available in the `release/` folder.
 
 ### Building the package
 
-To build the package, use the `create-kerlink-package.sh` script:
+To build the package, use the `scripts/multitech/create-package.sh` script:
 
 ```bash
-$ ./scripts/create-kerlink-package.sh release/packet-forwarder-linux-arm-multitech-ftdi
+$ ./scripts/multitech/create-package.sh release/<packet-forwarder-binary>
 [...]
-./scripts/create-kerlink-package.sh: package available at ttn-pkt-fwd-multitech.ipk
+# Following the instructions of the wizard
+./create-package.sh: package available at ttn-pkt-fwd.ipk
 ```
 
 The package will then be available at the specified path.

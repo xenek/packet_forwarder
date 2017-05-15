@@ -7,6 +7,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/TheThingsNetwork/packet_forwarder/util"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
@@ -35,6 +36,10 @@ func init() {
 }
 
 func initConfig() {
+	if cfgFile == "" {
+		cfgFile = util.GetConfigFile()
+	}
+
 	viper.SetConfigType("yaml")
 	viper.SetConfigName(".pktfwd")
 	viper.AddConfigPath("$HOME")
@@ -46,9 +51,10 @@ func initConfig() {
 		viper.SetConfigFile(cfgFile)
 	}
 
-	err := viper.ReadInConfig()
-	if err != nil {
-		fmt.Println("Error when reading config file:", err)
-		os.Exit(1)
+	if _, err := os.Stat(cfgFile); err == nil {
+		err := viper.ReadInConfig()
+		if err != nil {
+			fmt.Println("Error when reading config file:", err, "; If the file doesn't exist yet, create .pktfwd.yml by using the `configure` command.")
+		}
 	}
 }
