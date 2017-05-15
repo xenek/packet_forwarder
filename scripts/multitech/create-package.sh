@@ -21,7 +21,7 @@ if [[ ! -f "$multitech_installer_file" ]] ; then
     exit 1
 fi
 
-usage_str="usage: create-kerlink-package.sh [path to the Multitech build]
+usage_str="usage: create-kerlink-package.sh [path to the Multitech build] ([Gateway ID] [Gateway key])
 
 example: ./create-kerlink-package.sh packet-forwarder-multitech"
 
@@ -32,20 +32,72 @@ if [[ -z "$INITIAL_BINARY_PATH" ]] ; then
     exit 1
 fi
 
-WORKDIR="/tmp/packet-forwarder-multitech"
+if [[ $(which openssl) =~ "not found" ]] ; then
+    random_string="-$(< /dev/urandom tr -dc _A-Z-a-z-0-9 | head -c${1:-32};echo;)"
+else
+    random_string="-$(openssl rand -base64 15)"
+    random_string="${random_string//\/}"
+fi
+
+gatewayID="$2"
+gatewayKey="$3"
+if [[ ! -z "$4" ]] ; then
+    OUTPUT="/dev/null"
+else
+    OUTPUT="/dev/stdout"
+fi
+
+echo "$0: Creating file tree" &> "$OUTPUT"
+
+WORKDIR="/tmp/packet-forwarder-multitech-$random_string"
 BASE="/usr/bin"
 PKTFWD_DESTDIR="$WORKDIR$BASE"
 BINARY_NAME="ttn-pkt-fwd"
 
-echo "$0: Creating file tree"
 mkdir -p "$PKTFWD_DESTDIR" # /usr/bin
 mkdir -p "$WORKDIR/etc/init.d" # /etc/init.d
-mkdir -p "$WORKDIR/var/config/ttn-pkt-fwd"
-touch "$WORKDIR/var/config/ttn-pkt-fwd/config.yml"
+mkdir -p "$WORKDIR/usr/cfg"
+local_config_file="/usr/cfg/config.yml"
+config_file="$WORKDIR$local_config_file"
+touch "$config_file"
 cp "$INITIAL_BINARY_PATH" "$PKTFWD_DESTDIR/$BINARY_NAME"
 chmod +x "$PKTFWD_DESTDIR/$BINARY_NAME"
 
-echo "$0: Generating control file"
+configure () {
+    printf "%s: Gateway ID:\n> " "$0"
+
+    read -r gatewayID
+
+    printf "%s: Gateway Key:\n> " "$0"
+
+    read -r -s gatewayKey
+}
+
+if [[ -z "$gatewayID" && -z "$gatewayKey" ]] ; then
+    echo "$0: If you haven't registered your gateway yet, register it on the console or with \`ttnctl\`, using the gateway connector protocol." &> "$OUTPUT"
+
+    if [[ -f "$HOME/.pktfwd.yml" ]] ; then
+        while true; do
+            read -r -p "$0: Local packet forwarder configuration found (in $HOME/.pktfwd.yml). Do you want to include it in the package? " yn
+            case $yn in
+                [Yy]* ) cp "$HOME/.pktfwd.yml" "$config_file"; COPIED_CONFIG="1"; echo "$0: Local configuration included." &> "$OUTPUT"; break;;
+                [Nn]* ) echo "$0: Local packet forwarder configuration not copied, please enter the new configuration." &> "$OUTPUT"; configure "$PKTFWD_DESTDIR/$CFG_FILENAME"; break;;
+                * ) echo "Please answer [y]es or [n]o." &> "$OUTPUT";;
+            esac
+        done
+    else
+        configure
+    fi
+
+    echo "$0: Configuration packaged." &> "$OUTPUT"
+fi
+
+if [[ -z "$COPIED_CONFIG" ]] ; then
+    echo "id: \"${gatewayID}\"
+key: \"${gatewayKey}\"" > "$config_file"
+fi
+
+echo "$0: Generating control file" &> "$OUTPUT"
 echo "Package: ttn-pkt-fwd
 Version: 2.0.0
 Description: TTN Packet Forwarder
@@ -59,7 +111,7 @@ Homepage: https://github.com/TheThingsNetwork/packet_forwarder
 Depends: libmpsse (>= 1.3), libc6 (>= 2.19)
 Source: git://github.com/TheThingsNetwork/packet_forwarder.git;protocol=git" > "$WORKDIR/control"
 
-echo "$0: Generating service script"
+echo "$0: Generating service script" &> "$OUTPUT"
 echo "#!/bin/bash
 
 NAME=\"$BINARY_NAME\"
@@ -86,7 +138,7 @@ card_found() {
     if [ \"\$lora_id\" = \"\$lora_us_id\" ] || [ \"\$lora_id\" = \"\$lora_eu_id\" ]; then
         echo \"Found lora card \$lora_id\"
         return 1
-    else 
+    else
         return 0
     fi
 }
@@ -142,8 +194,8 @@ configure() {
     mkdir -p \$conf_dir
     if [[ ! -f \"\$conf_dir/config.yml\" ]] ; then
         touch \"\$conf_dir/config.yml\"
+        \$pkt_fwd configure \"\$conf_dir/config.yml\" --config=\"\$conf_dir/config.yml\"
     fi
-    \$pkt_fwd configure \"\$conf_dir/config.yml\" --config=\"\$conf_dir/config.yml\"
     exit
 }
 
@@ -183,14 +235,22 @@ chmod +x "$WORKDIR/postinst"
 cp "$multitech_installer_file" "$PKTFWD_DESTDIR"
 chmod +x "$PKTFWD_DESTDIR/multitech-installer.sh"
 
+FILENAME="ttn-pkt-fwd$random_string.ipk"
+
 pushd "$WORKDIR" &> /dev/null
 tar -czvf "data.tar.gz" "etc" "var" "usr" &> /dev/null
 tar -czvf "control.tar.gz" "control" "postinst" &> /dev/null
-tar -czvf "ttn-pkt-fwd.ipk" "data.tar.gz" "control.tar.gz" &> /dev/null
+tar -czvf "$FILENAME" "data.tar.gz" "control.tar.gz" &> /dev/null
 popd &> /dev/null
 
-mv "$WORKDIR/ttn-pkt-fwd.ipk" "$PWD"
+release_folder="multitech-release$random_string"
+mkdir "$release_folder"
+mv "$WORKDIR/$FILENAME" "$PWD/$release_folder"
 
-rm -rf $WORKDIR
+rm -rf "$WORKDIR"
 
-echo "$0: package available at $PWD/ttn-pkt-fwd.ipk"
+echo "$0: package available at $PWD/$release_folder/$FILENAME" &> "$OUTPUT"
+
+if [[ ! -z "$4" ]] ; then
+    printf "%s/%s/%s" "$PWD" "$release_folder" "$FILENAME"
+fi
