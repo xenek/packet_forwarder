@@ -59,6 +59,11 @@ var startCmd = &cobra.Command{
 			}
 		}
 
+		crcCheck := !config.GetBool("ignore-crc")
+		if !crcCheck {
+			ctx.Warn("CRC check disabled, non-CRC valid packets will be sent upstream.")
+		}
+
 		ttnConfig := &pktfwd.TTNConfig{
 			ID:                  config.GetString("id"),
 			Key:                 config.GetString("key"),
@@ -67,6 +72,7 @@ var startCmd = &cobra.Command{
 			Router:              config.GetString("router"),
 			Version:             config.GetString("version"),
 			DownlinksSendMargin: time.Duration(config.GetInt64("downlink-send-margin")) * time.Millisecond,
+			CRCCheck:            crcCheck,
 		}
 
 		conf, err := pktfwd.FetchConfig(ctx, ttnConfig)
@@ -92,6 +98,7 @@ func init() {
 	startCmd.PersistentFlags().String("run-trace", "", "File to which write the runtime trace of the packet forwarder. Can later be read with `go tool trace <trace_file>`.")
 	startCmd.PersistentFlags().Int("reset-pin", 0, "GPIO pin associated to the reset pin of the board")
 	startCmd.PersistentFlags().BoolP("verbose", "v", false, "Show debug logs")
+	startCmd.PersistentFlags().Bool("ignore-crc", false, "Send packets upstream even if CRC validation is incorrect")
 
 	viper.BindPFlags(startCmd.PersistentFlags())
 

@@ -30,6 +30,7 @@ type TTNConfig struct {
 	Version             string
 	GatewayDescription  string
 	DownlinksSendMargin time.Duration
+	CRCCheck            bool
 }
 
 type TTNClient struct {
