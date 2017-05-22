@@ -107,12 +107,12 @@ func createUplinkMessage(gatewayID string, packet wrapper.Packet) (router.Uplink
 	return uplink, nil
 }
 
-func wrapUplinkPayload(packets []wrapper.Packet, crcCheck bool, gatewayID string) ([]router.UplinkMessage, error) {
+func wrapUplinkPayload(packets []wrapper.Packet, ignoreCrc bool, gatewayID string) ([]router.UplinkMessage, error) {
 	var messages = make([]router.UplinkMessage, 0, wrapper.NbMaxPackets)
 	// Iterating through every packet:
 	for _, inspectedPacket := range packets {
 		// First, we'll check the CRC is conform to the packets the gateway is configured to transmit
-		if crcCheck && !acceptedCRC(inspectedPacket) {
+		if !ignoreCrc && !acceptedCRC(inspectedPacket) {
 			continue
 		}
 

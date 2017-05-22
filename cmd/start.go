@@ -59,9 +59,9 @@ var startCmd = &cobra.Command{
 			}
 		}
 
-		crcCheck := !config.GetBool("ignore-crc")
-		if !crcCheck {
-			ctx.Warn("CRC check disabled, non-CRC valid packets will be sent upstream.")
+		ignoreCrc := config.GetBool("ignore-crc")
+		if ignoreCrc {
+			ctx.Warn("CRC check disabled, packets with invalid CRC will be sent upstream.")
 		}
 
 		ttnConfig := &pktfwd.TTNConfig{
@@ -72,7 +72,7 @@ var startCmd = &cobra.Command{
 			Router:              config.GetString("router"),
 			Version:             config.GetString("version"),
 			DownlinksSendMargin: time.Duration(config.GetInt64("downlink-send-margin")) * time.Millisecond,
-			CRCCheck:            crcCheck,
+			IgnoreCrc:           ignoreCrc,
 		}
 
 		conf, err := pktfwd.FetchConfig(ctx, ttnConfig)

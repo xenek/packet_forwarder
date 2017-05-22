@@ -35,7 +35,7 @@ type Manager struct {
 	bootTimeSetters     multipleBootTimeSetter
 	foundBootTime       bool
 	isGPS               bool
-	crcCheck            bool
+	ignoreCrc           bool
 	downlinksSendMargin time.Duration
 }
 
@@ -56,7 +56,7 @@ func NewManager(ctx log.Interface, conf util.Config, netClient NetworkClient, gp
 		// At the beginning, until we get our first uplinks, we keep a high polling rate to the concentrator
 		uplinkPollingRate:   initUplinkPollingRate,
 		downlinksSendMargin: runConfig.DownlinksSendMargin,
-		crcCheck:            runConfig.CRCCheck,
+		ignoreCrc:           runConfig.IgnoreCrc,
 	}
 }
 
@@ -151,7 +151,7 @@ func (m *Manager) uplinkRoutine(bgCtx context.Context, errc chan error, runStart
 			}
 		}
 
-		validPackets, err := wrapUplinkPayload(packets, m.crcCheck, m.netClient.GatewayID())
+		validPackets, err := wrapUplinkPayload(packets, m.ignoreCrc, m.netClient.GatewayID())
 		if err != nil {
 			continue
 		}
