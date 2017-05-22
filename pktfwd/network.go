@@ -37,21 +37,21 @@ type TTNConfig struct {
 }
 
 type TTNClient struct {
-	antennaLocation   *account.AntennaLocation
-	currentRouterConn *grpc.ClientConn
-	ctx               log.Interface
-	uplinkStream      router.UplinkStream
-	uplinkMutex       sync.Mutex
-	downlinkStream    router.DownlinkStream
-	statusStream      router.GatewayStatusStream
-	account           *account.Account
-	runConfig         TTNConfig
-	connected         bool
-	streamsMutex      *sync.Mutex
-	routerMutex       *sync.Mutex
-	token             string
-	tokenExpiry       time.Time
-	frequencyPlan     string
+	antennaLocation *account.AntennaLocation
+	routerConn      *grpc.ClientConn
+	ctx             log.Interface
+	uplinkStream    router.UplinkStream
+	uplinkMutex     sync.Mutex
+	downlinkStream  router.DownlinkStream
+	statusStream    router.GatewayStatusStream
+	account         *account.Account
+	runConfig       TTNConfig
+	connected       bool
+	networkMutex    *sync.Mutex
+	streamsMutex    *sync.Mutex
+	token           string
+	tokenExpiry     time.Time
+	frequencyPlan   string
 	// Communication between internal goroutines
 	stopDownlinkQueue          chan bool
 	stopUplinkQueue            chan bool
@@ -59,6 +59,7 @@ type TTNClient struct {
 	downlinkStreamChange       chan bool
 	downlinkQueue              chan *router.DownlinkMessage
 	uplinkQueue                chan *router.UplinkMessage
+	routerChanges              chan func(c *TTNClient) error
 }
 
 type NetworkClient interface {
@@ -133,19 +134,19 @@ func (c *TTNClient) tryMainRouterReconnection(gw account.Gateway, discoveryClien
 			continue
 		}
 
+		c.routerChanges <- func(t *TTNClient) error {
+			t.routerConn = routerConn
+			return nil
+		}
 		c.ctx.Info("Connection to main router successful")
-		c.routerMutex.Lock()
-		c.currentRouterConn = routerConn
-		c.routerMutex.Unlock()
-		c.refreshClients()
 		break
 	}
 }
 
 func (c *TTNClient) Ping() (time.Duration, error) {
-	c.routerMutex.Lock()
-	t, err := connectionHealthCheck(c.currentRouterConn)
-	c.routerMutex.Unlock()
+	c.networkMutex.Lock()
+	t, err := connectionHealthCheck(c.routerConn)
+	c.networkMutex.Unlock()
 	return t, err
 }
 
@@ -202,7 +203,7 @@ func (c *TTNClient) getLowestLatencyRouterFromAnnouncements(discoveryClient disc
 	return routerConn, nil
 }
 
-func (c *TTNClient) getRouterClient(ctx log.Interface) (router.RouterClient, error) {
+func (c *TTNClient) getRouterClient(ctx log.Interface) error {
 	ctx.WithField("Address", c.runConfig.DiscoveryServer).Info("Connecting to TTN discovery server")
 	discoveryClient, err := discovery.NewClient(c.runConfig.DiscoveryServer, &discovery.Announcement{
 		ServiceName:    "ttn-packet-forwarder",
@@ -210,7 +211,7 @@ func (c *TTNClient) getRouterClient(ctx log.Interface) (router.RouterClient, err
 		Id:             c.runConfig.ID,
 	}, func() string { return "" })
 	if err != nil {
-		return nil, err
+		return err
 	}
 	ctx.Info("Connected to discovery server - getting router address")
 
@@ -220,7 +221,7 @@ func (c *TTNClient) getRouterClient(ctx log.Interface) (router.RouterClient, err
 	if c.runConfig.Router == "" {
 		gw, err := c.account.FindGateway(c.GatewayID())
 		if err != nil {
-			return nil, errors.Wrap(err, "Couldn't fetch the gateway information from the account server")
+			return errors.Wrap(err, "Couldn't fetch the gateway information from the account server")
 		}
 
 		if gw.Router.ID != "" {
@@ -236,35 +237,33 @@ func (c *TTNClient) getRouterClient(ctx log.Interface) (router.RouterClient, err
 				routers, err := discoveryClient.GetAll("router")
 				if err != nil {
 					ctx.WithError(err).Error("Couldn't retrieve routers")
-					return nil, err
+					return err
 				}
 				routerConn, err = c.getLowestLatencyRouterFromAnnouncements(discoveryClient, routers)
 				if err != nil {
-					return nil, errors.Wrap(err, "Couldn't figure out the lowest latency router")
+					return errors.Wrap(err, "Couldn't figure out the lowest latency router")
 				}
 			} else {
 				routerConn, err = c.getLowestLatencyRouter(discoveryClient, fallbackRouters)
 				if err != nil {
-					return nil, errors.Wrap(err, "Couldn't figure out the lowest latency router")
+					return errors.Wrap(err, "Couldn't figure out the lowest latency router")
 				}
 			}
 			defer func() {
-				// Wait for the function to be finished, to protect `c.currentRouterConn`
+				// Wait for the function to be finished, to protect `c.routerConn`
 				go c.tryMainRouterReconnection(gw, discoveryClient)
 			}()
 		}
 	} else {
 		routerConn, err = connectToRouter(ctx, discoveryClient, c.runConfig.Router)
 		if err != nil {
-			return nil, errors.Wrap(err, "Couldn't connect to user-specified router")
+			return errors.Wrap(err, "Couldn't connect to user-specified router")
 		}
 		ctx.Info("Connected to router")
 	}
 
-	c.routerMutex.Lock()
-	c.currentRouterConn = routerConn
-	c.routerMutex.Unlock()
-	return router.NewRouterClient(routerConn), nil
+	c.routerConn = routerConn
+	return nil
 }
 
 func (c *TTNClient) Downlinks() <-chan *router.DownlinkMessage {
@@ -291,7 +290,9 @@ func (c *TTNClient) queueUplinks() {
 
 func (c *TTNClient) queueDownlinks() {
 	c.ctx.Info("Downlinks queuing routine started")
+	c.streamsMutex.Lock()
 	downlinkStreamChannel := c.downlinkStream.Channel()
+	c.streamsMutex.Unlock()
 	for {
 		select {
 		case <-c.stopDownlinkQueue:
@@ -302,12 +303,15 @@ func (c *TTNClient) queueDownlinks() {
 			c.ctx.Info("Received downlink packet")
 			c.downlinkQueue <- downlink
 		case <-c.downlinkStreamChange:
+			c.streamsMutex.Lock()
 			downlinkStreamChannel = c.downlinkStream.Channel()
+			c.streamsMutex.Unlock()
 		}
 	}
 }
 
 func (c *TTNClient) fetchAccountServerInfo() error {
+	c.account = account.NewWithKey(c.runConfig.AuthServer, c.runConfig.Key)
 	gw, err := c.account.FindGateway(c.runConfig.ID)
 	if err != nil {
 		return errors.Wrap(err, "Account server error")
@@ -320,32 +324,18 @@ func (c *TTNClient) fetchAccountServerInfo() error {
 	return nil
 }
 
-func (c *TTNClient) refreshAccountInfo() error {
-	c.account = account.NewWithKey(c.runConfig.AuthServer, c.runConfig.Key)
-	return c.fetchAccountServerInfo()
-}
-
-func (c *TTNClient) refreshClients() {
-	c.uplinkMutex.Lock()
-	c.routerMutex.Lock()
-	c.connectToStreams(router.NewRouterClientForGateway(router.NewRouterClient(c.currentRouterConn), c.runConfig.ID, c.token), true)
-	c.routerMutex.Unlock()
-	c.uplinkMutex.Unlock()
-	c.downlinkStreamChange <- true
-}
-
 func (c *TTNClient) RefreshRoutine(ctx context.Context) error {
 	for {
 		refreshTime := c.tokenExpiry.Add(tokenRefreshMargin)
 		c.ctx.Debugf("Preparing to update network clients at %v", refreshTime)
 		select {
 		case <-time.After(refreshTime.Sub(time.Now())):
-			err := c.refreshAccountInfo()
-			if err != nil {
-				return err
+			c.routerChanges <- func(t *TTNClient) error {
+				if err := t.fetchAccountServerInfo(); err != nil {
+					return errors.Wrap(err, "Couldn't update account server info")
+				}
+				return nil
 			}
-
-			c.refreshClients()
 			c.ctx.Debug("Refreshed network connection")
 		case <-ctx.Done():
 			return nil
@@ -355,29 +345,36 @@ func (c *TTNClient) RefreshRoutine(ctx context.Context) error {
 
 func CreateNetworkClient(ctx log.Interface, ttnConfig TTNConfig) (NetworkClient, error) {
 	var client = &TTNClient{
-		ctx:               ctx,
-		runConfig:         ttnConfig,
-		downlinkQueue:     make(chan *router.DownlinkMessage),
-		uplinkQueue:       make(chan *router.UplinkMessage, uplinksBufferSize),
-		routerMutex:       &sync.Mutex{},
-		streamsMutex:      &sync.Mutex{},
-		stopDownlinkQueue: make(chan bool),
-		stopUplinkQueue:   make(chan bool),
+		ctx:                  ctx,
+		runConfig:            ttnConfig,
+		downlinkQueue:        make(chan *router.DownlinkMessage),
+		uplinkQueue:          make(chan *router.UplinkMessage, uplinksBufferSize),
+		networkMutex:         &sync.Mutex{},
+		streamsMutex:         &sync.Mutex{},
+		stopDownlinkQueue:    make(chan bool),
+		stopUplinkQueue:      make(chan bool),
+		downlinkStreamChange: make(chan bool),
+		routerChanges:        make(chan func(c *TTNClient) error),
 	}
+
+	client.networkMutex.Lock()
+	defer client.networkMutex.Unlock()
 
 	// Get the first token
-	err := client.refreshAccountInfo()
+	err := client.fetchAccountServerInfo()
 	if err != nil {
 		return nil, err
 	}
 
-	// Getting a RouterClient object
-	routerClient, err := client.getRouterClient(ctx)
+	// Updating with the initial RouterConn
+	err = client.getRouterClient(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	client.connectToStreams(router.NewRouterClientForGateway(routerClient, ttnConfig.ID, client.token), false)
+	client.connectToStreams(router.NewRouterClientForGateway(router.NewRouterClient(client.routerConn), client.runConfig.ID, client.token))
+
+	go client.watchRouterChanges()
 
 	go client.queueDownlinks()
 	go client.queueUplinks()
@@ -385,15 +382,28 @@ func CreateNetworkClient(ctx log.Interface, ttnConfig TTNConfig) (NetworkClient,
 	return client, nil
 }
 
-func (c *TTNClient) connectToStreams(routerClient router.RouterClientForGateway, force bool) {
+func (c *TTNClient) watchRouterChanges() {
+	for {
+		select {
+		case routerChange := <-c.routerChanges:
+			if routerChange == nil { // Channel closed, shutting network client down
+				return
+			}
+			c.networkMutex.Lock()
+			if err := routerChange(c); err != nil {
+				c.ctx.WithError(err).Warn("Couldn't operate network client change")
+			}
+			c.connectToStreams(router.NewRouterClientForGateway(router.NewRouterClient(c.routerConn), c.runConfig.ID, c.token))
+			c.networkMutex.Unlock()
+			c.downlinkStreamChange <- true
+		}
+	}
+}
+
+func (c *TTNClient) connectToStreams(routerClient router.RouterClientForGateway) {
 	c.streamsMutex.Lock()
 	defer c.streamsMutex.Unlock()
 	if c.connected {
-		if !force {
-			// If the client is already connected and the new routerClient doesn't want to force
-			// connection change, the function is dropped
-			return
-		}
 		c.disconnectOfStreams()
 	}
 	c.uplinkStream = router.NewMonitoredUplinkStream(routerClient)
@@ -457,6 +467,7 @@ func (c *TTNClient) Stop() {
 	default:
 		break
 	}
+	close(c.routerChanges)
 	c.streamsMutex.Lock()
 	c.disconnectOfStreams()
 	c.streamsMutex.Unlock()

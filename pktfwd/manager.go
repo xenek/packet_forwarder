@@ -241,24 +241,37 @@ func (m *Manager) networkRoutine(bgCtx context.Context, errC chan error) {
 }
 
 func (m *Manager) startRoutines(bgCtx context.Context, err chan error, runTime time.Time) {
-	var errC = make(chan error, 4)
+	uplinkErrors := make(chan error)
+	defer close(uplinkErrors)
+	statusErrors := make(chan error)
+	defer close(statusErrors)
+	networkErrors := make(chan error)
+	defer close(networkErrors)
+	gpsErrors := make(chan error)
+	defer close(gpsErrors)
+
 	upCtx, upCancel := context.WithCancel(bgCtx)
 	downCtx, downCancel := context.WithCancel(bgCtx)
 	statsCtx, statsCancel := context.WithCancel(bgCtx)
 	gpsCtx, gpsCancel := context.WithCancel(bgCtx)
 	networkCtx, networkCancel := context.WithCancel(bgCtx)
 
-	go m.uplinkRoutine(upCtx, errC, runTime)
+	go m.uplinkRoutine(upCtx, uplinkErrors, runTime)
 	go m.downlinkRoutine(downCtx)
-	go m.statusRoutine(statsCtx, errC)
-	go m.networkRoutine(networkCtx, errC)
+	go m.statusRoutine(statsCtx, statusErrors)
+	go m.networkRoutine(networkCtx, networkErrors)
 	if m.isGPS {
-		go m.gpsRoutine(gpsCtx, errC)
+		go m.gpsRoutine(gpsCtx, gpsErrors)
 	}
 	select {
-	case routineErr := <-errC:
-		err <- routineErr
-		close(errC)
+	case uplinkError := <-uplinkErrors:
+		err <- errors.Wrap(uplinkError, "Uplink routine error")
+	case statusError := <-statusErrors:
+		err <- errors.Wrap(statusError, "Status routine error")
+	case networkError := <-networkErrors:
+		err <- errors.Wrap(networkError, "Network routine error")
+	case gpsError := <-gpsErrors:
+		err <- errors.Wrap(gpsError, "GPS routine error")
 	case <-bgCtx.Done():
 		err <- nil
 	}
