@@ -233,16 +233,25 @@ func (m *Manager) statusRoutine(bgCtx context.Context, errC chan error) {
 	}
 }
 
+func (m *Manager) networkRoutine(bgCtx context.Context, errC chan error) {
+	err := m.netClient.RefreshRoutine(bgCtx)
+	if err != nil {
+		errC <- errors.Wrap(err, "Couldn't refresh account server token")
+	}
+}
+
 func (m *Manager) startRoutines(bgCtx context.Context, err chan error, runTime time.Time) {
-	var errC = make(chan error)
+	var errC = make(chan error, 4)
 	upCtx, upCancel := context.WithCancel(bgCtx)
 	downCtx, downCancel := context.WithCancel(bgCtx)
 	statsCtx, statsCancel := context.WithCancel(bgCtx)
 	gpsCtx, gpsCancel := context.WithCancel(bgCtx)
+	networkCtx, networkCancel := context.WithCancel(bgCtx)
 
 	go m.uplinkRoutine(upCtx, errC, runTime)
 	go m.downlinkRoutine(downCtx)
 	go m.statusRoutine(statsCtx, errC)
+	go m.networkRoutine(networkCtx, errC)
 	if m.isGPS {
 		go m.gpsRoutine(gpsCtx, errC)
 	}
@@ -257,6 +266,7 @@ func (m *Manager) startRoutines(bgCtx context.Context, err chan error, runTime t
 	gpsCancel()
 	downCancel()
 	statsCancel()
+	networkCancel()
 }
 
 func (m *Manager) shutdown() error {

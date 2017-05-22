@@ -3,6 +3,7 @@
 package pktfwd
 
 import (
+	"context"
 	"fmt"
 	"math"
 	"sync"
@@ -19,7 +20,10 @@ import (
 	"google.golang.org/grpc"
 )
 
-const uplinksBufferSize = 32
+const (
+	tokenRefreshMargin = -2 * time.Minute
+	uplinksBufferSize  = 32
+)
 
 type TTNConfig struct {
 	ID                  string
@@ -41,10 +45,12 @@ type TTNClient struct {
 	downlinkStream    router.DownlinkStream
 	statusStream      router.GatewayStatusStream
 	account           *account.Account
-	id                string
+	runConfig         TTNConfig
 	connected         bool
-	streamsMutex      sync.Mutex
+	streamsMutex      *sync.Mutex
+	routerMutex       *sync.Mutex
 	token             string
+	tokenExpiry       time.Time
 	frequencyPlan     string
 	// Communication between internal goroutines
 	stopDownlinkQueue          chan bool
@@ -64,10 +70,11 @@ type NetworkClient interface {
 	Ping() (time.Duration, error)
 	DefaultLocation() *account.AntennaLocation
 	Stop()
+	RefreshRoutine(ctx context.Context) error
 }
 
 func (c *TTNClient) GatewayID() string {
-	return c.id
+	return c.runConfig.ID
 }
 
 type RouterHealthCheck struct {
@@ -93,7 +100,7 @@ func connectToRouter(ctx log.Interface, discoveryClient discovery.Client, router
 
 	var announcement = *routerAccess
 
-	ctx.Info("Connecting to router...")
+	ctx.WithField("RouterID", router).Info("Connecting to router...")
 	return announcement.Dial()
 }
 
@@ -109,7 +116,7 @@ func reconnectionDelay(tries uint) time.Duration {
 	return time.Duration(math.Exp(float64(tries)/2.0)) * time.Second
 }
 
-func (c *TTNClient) tryMainRouterReconnection(gw account.Gateway, discoveryClient discovery.Client, gatewayID string) {
+func (c *TTNClient) tryMainRouterReconnection(gw account.Gateway, discoveryClient discovery.Client) {
 	tries := uint(0)
 	for {
 		select {
@@ -127,17 +134,19 @@ func (c *TTNClient) tryMainRouterReconnection(gw account.Gateway, discoveryClien
 		}
 
 		c.ctx.Info("Connection to main router successful")
-		c.uplinkMutex.Lock()
-		c.connectToStreams(router.NewRouterClientForGateway(router.NewRouterClient(routerConn), gatewayID, c.token), true)
-		c.uplinkMutex.Unlock()
+		c.routerMutex.Lock()
 		c.currentRouterConn = routerConn
-		c.downlinkStreamChange <- true
+		c.routerMutex.Unlock()
+		c.refreshClients()
 		break
 	}
 }
 
 func (c *TTNClient) Ping() (time.Duration, error) {
-	return connectionHealthCheck(c.currentRouterConn)
+	c.routerMutex.Lock()
+	t, err := connectionHealthCheck(c.currentRouterConn)
+	c.routerMutex.Unlock()
+	return t, err
 }
 
 func (c *TTNClient) getLowestLatencyRouter(discoveryClient discovery.Client, fallbackRouters []account.GatewayRouter) (*grpc.ClientConn, error) {
@@ -193,12 +202,12 @@ func (c *TTNClient) getLowestLatencyRouterFromAnnouncements(discoveryClient disc
 	return routerConn, nil
 }
 
-func (c *TTNClient) getRouterClient(ctx log.Interface, ttnConfig TTNConfig) (router.RouterClient, error) {
-	ctx.WithField("Address", ttnConfig.DiscoveryServer).Info("Connecting to TTN discovery server")
-	discoveryClient, err := discovery.NewClient(ttnConfig.DiscoveryServer, &discovery.Announcement{
+func (c *TTNClient) getRouterClient(ctx log.Interface) (router.RouterClient, error) {
+	ctx.WithField("Address", c.runConfig.DiscoveryServer).Info("Connecting to TTN discovery server")
+	discoveryClient, err := discovery.NewClient(c.runConfig.DiscoveryServer, &discovery.Announcement{
 		ServiceName:    "ttn-packet-forwarder",
-		ServiceVersion: ttnConfig.Version,
-		Id:             c.id,
+		ServiceVersion: c.runConfig.Version,
+		Id:             c.runConfig.ID,
 	}, func() string { return "" })
 	if err != nil {
 		return nil, err
@@ -208,7 +217,7 @@ func (c *TTNClient) getRouterClient(ctx log.Interface, ttnConfig TTNConfig) (rou
 	defer discoveryClient.Close()
 
 	var routerConn *grpc.ClientConn
-	if ttnConfig.Router == "" {
+	if c.runConfig.Router == "" {
 		gw, err := c.account.FindGateway(c.GatewayID())
 		if err != nil {
 			return nil, errors.Wrap(err, "Couldn't fetch the gateway information from the account server")
@@ -241,18 +250,20 @@ func (c *TTNClient) getRouterClient(ctx log.Interface, ttnConfig TTNConfig) (rou
 			}
 			defer func() {
 				// Wait for the function to be finished, to protect `c.currentRouterConn`
-				go c.tryMainRouterReconnection(gw, discoveryClient, c.GatewayID())
+				go c.tryMainRouterReconnection(gw, discoveryClient)
 			}()
 		}
 	} else {
-		routerConn, err = connectToRouter(ctx, discoveryClient, ttnConfig.Router)
+		routerConn, err = connectToRouter(ctx, discoveryClient, c.runConfig.Router)
 		if err != nil {
 			return nil, errors.Wrap(err, "Couldn't connect to user-specified router")
 		}
 		ctx.Info("Connected to router")
 	}
 
+	c.routerMutex.Lock()
 	c.currentRouterConn = routerConn
+	c.routerMutex.Unlock()
 	return router.NewRouterClient(routerConn), nil
 }
 
@@ -296,35 +307,72 @@ func (c *TTNClient) queueDownlinks() {
 	}
 }
 
-func (c *TTNClient) fetchAccountServerInfo(gatewayID string) error {
-	gw, err := c.account.FindGateway(gatewayID)
+func (c *TTNClient) fetchAccountServerInfo() error {
+	gw, err := c.account.FindGateway(c.runConfig.ID)
 	if err != nil {
 		return errors.Wrap(err, "Account server error")
 	}
 	c.antennaLocation = gw.AntennaLocation
 	c.token = gw.Token.AccessToken
+	c.tokenExpiry = gw.Token.Expiry
 	c.frequencyPlan = gw.FrequencyPlan
+	c.ctx.WithField("TokenExpiry", c.tokenExpiry).Info("Refreshed account server information")
 	return nil
+}
+
+func (c *TTNClient) refreshAccountInfo() error {
+	c.account = account.NewWithKey(c.runConfig.AuthServer, c.runConfig.Key)
+	return c.fetchAccountServerInfo()
+}
+
+func (c *TTNClient) refreshClients() {
+	c.uplinkMutex.Lock()
+	c.routerMutex.Lock()
+	c.connectToStreams(router.NewRouterClientForGateway(router.NewRouterClient(c.currentRouterConn), c.runConfig.ID, c.token), true)
+	c.routerMutex.Unlock()
+	c.uplinkMutex.Unlock()
+	c.downlinkStreamChange <- true
+}
+
+func (c *TTNClient) RefreshRoutine(ctx context.Context) error {
+	for {
+		refreshTime := c.tokenExpiry.Add(tokenRefreshMargin)
+		c.ctx.Debugf("Preparing to update network clients at %v", refreshTime)
+		select {
+		case <-time.After(refreshTime.Sub(time.Now())):
+			err := c.refreshAccountInfo()
+			if err != nil {
+				return err
+			}
+
+			c.refreshClients()
+			c.ctx.Debug("Refreshed network connection")
+		case <-ctx.Done():
+			return nil
+		}
+	}
 }
 
 func CreateNetworkClient(ctx log.Interface, ttnConfig TTNConfig) (NetworkClient, error) {
 	var client = &TTNClient{
-		account:           account.NewWithKey(ttnConfig.AuthServer, ttnConfig.Key),
 		ctx:               ctx,
-		id:                ttnConfig.ID,
+		runConfig:         ttnConfig,
 		downlinkQueue:     make(chan *router.DownlinkMessage),
 		uplinkQueue:       make(chan *router.UplinkMessage, uplinksBufferSize),
+		routerMutex:       &sync.Mutex{},
+		streamsMutex:      &sync.Mutex{},
 		stopDownlinkQueue: make(chan bool),
 		stopUplinkQueue:   make(chan bool),
 	}
 
-	err := client.fetchAccountServerInfo(ttnConfig.ID)
+	// Get the first token
+	err := client.refreshAccountInfo()
 	if err != nil {
 		return nil, err
 	}
 
 	// Getting a RouterClient object
-	routerClient, err := client.getRouterClient(ctx, ttnConfig)
+	routerClient, err := client.getRouterClient(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -409,4 +457,7 @@ func (c *TTNClient) Stop() {
 	default:
 		break
 	}
+	c.streamsMutex.Lock()
+	c.disconnectOfStreams()
+	c.streamsMutex.Unlock()
 }
