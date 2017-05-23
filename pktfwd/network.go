@@ -145,8 +145,8 @@ func (c *TTNClient) tryMainRouterReconnection(gw account.Gateway, discoveryClien
 
 func (c *TTNClient) Ping() (time.Duration, error) {
 	c.networkMutex.Lock()
+	defer c.networkMutex.Unlock()
 	t, err := connectionHealthCheck(c.routerConn)
-	c.networkMutex.Unlock()
 	return t, err
 }
 
@@ -392,10 +392,11 @@ func (c *TTNClient) watchRouterChanges() {
 			c.networkMutex.Lock()
 			if err := routerChange(c); err != nil {
 				c.ctx.WithError(err).Warn("Couldn't operate network client change")
+			} else {
+				c.connectToStreams(router.NewRouterClientForGateway(router.NewRouterClient(c.routerConn), c.runConfig.ID, c.token))
+				c.downlinkStreamChange <- true
 			}
-			c.connectToStreams(router.NewRouterClientForGateway(router.NewRouterClient(c.routerConn), c.runConfig.ID, c.token))
 			c.networkMutex.Unlock()
-			c.downlinkStreamChange <- true
 		}
 	}
 }
@@ -469,6 +470,6 @@ func (c *TTNClient) Stop() {
 	}
 	close(c.routerChanges)
 	c.streamsMutex.Lock()
+	defer c.streamsMutex.Unlock()
 	c.disconnectOfStreams()
-	c.streamsMutex.Unlock()
 }

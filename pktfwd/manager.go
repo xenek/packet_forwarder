@@ -126,67 +126,75 @@ func (m *Manager) setBootTime(bootTime time.Time) {
 	m.uplinkPollingRate = stableUplinkPollingRate
 }
 
-func (m *Manager) uplinkRoutine(bgCtx context.Context, errc chan error, runStart time.Time) {
-	m.ctx.Info("Waiting for uplink packets")
-	for {
-		packets, err := wrapper.Receive()
-		if err != nil {
-			errc <- errors.Wrap(err, "Uplink packets retrieval error")
-			return
-		}
-		if len(packets) == 0 { // Empty payload => we sleep, then reiterate.
-			time.Sleep(m.uplinkPollingRate)
-			continue
-		}
-
-		m.ctx.WithField("NbPackets", len(packets)).Info("Received uplink packets")
-		if !m.foundBootTime {
-			// First packets received => find concentrator boot time
-			err = m.findConcentratorBootTime(packets, runStart)
+func (m *Manager) uplinkRoutine(bgCtx context.Context, runStart time.Time) chan error {
+	errC := make(chan error)
+	go func() {
+		m.ctx.Info("Waiting for uplink packets")
+		for {
+			packets, err := wrapper.Receive()
 			if err != nil {
-				m.ctx.WithError(err).Warn("Error when computing concentrator boot time - using packet forwarder run start time")
-				m.setBootTime(runStart)
+				errC <- errors.Wrap(err, "Uplink packets retrieval error")
+				return
+			}
+			if len(packets) == 0 { // Empty payload => we sleep, then reiterate.
+				time.Sleep(m.uplinkPollingRate)
+				continue
+			}
+
+			m.ctx.WithField("NbPackets", len(packets)).Info("Received uplink packets")
+			if !m.foundBootTime {
+				// First packets received => find concentrator boot time
+				err = m.findConcentratorBootTime(packets, runStart)
+				if err != nil {
+					m.ctx.WithError(err).Warn("Error when computing concentrator boot time - using packet forwarder run start time")
+					m.setBootTime(runStart)
+				}
+			}
+
+			validPackets, err := wrapUplinkPayload(packets, m.netClient.GatewayID())
+			if err != nil {
+				continue
+			}
+			m.statusMgr.HandledRXBatch(len(validPackets), len(packets))
+			if len(validPackets) == 0 {
+				m.ctx.Warn("Packets received, but with invalid CRC - ignoring")
+				time.Sleep(m.uplinkPollingRate)
+				continue
+			}
+
+			m.ctx.WithField("NbValidPackets", len(validPackets)).Info("Received valid packets - sending them to the back-end")
+			m.netClient.SendUplinks(validPackets)
+
+			select {
+			case <-bgCtx.Done():
+				errC <- nil
+				return
+			default:
+				continue
 			}
 		}
-
-		validPackets, err := wrapUplinkPayload(packets, m.netClient.GatewayID())
-		if err != nil {
-			continue
-		}
-		m.statusMgr.HandledRXBatch(len(validPackets), len(packets))
-		if len(validPackets) == 0 {
-			m.ctx.Warn("Packets received, but with invalid CRC - ignoring")
-			time.Sleep(m.uplinkPollingRate)
-			continue
-		}
-
-		m.ctx.WithField("NbValidPackets", len(validPackets)).Info("Received valid packets - sending them to the back-end")
-		m.netClient.SendUplinks(validPackets)
-
-		select {
-		case <-bgCtx.Done():
-			errc <- nil
-			return
-		default:
-			continue
-		}
-	}
+	}()
+	return errC
 }
 
-func (m *Manager) gpsRoutine(bgCtx context.Context, errC chan error) {
-	m.ctx.Info("Starting GPS update routine")
-	for {
-		select {
-		case <-bgCtx.Done():
-			return
-		default:
-			// The GPS time reference and coordinates are updated at `gpsUpdateRate`
-			err := wrapper.UpdateGPSData(m.ctx)
-			if err != nil {
-				errC <- errors.Wrap(err, "GPS update error")
+func (m *Manager) gpsRoutine(bgCtx context.Context) chan error {
+	errC := make(chan error)
+	go func() {
+		m.ctx.Info("Starting GPS update routine")
+		for {
+			select {
+			case <-bgCtx.Done():
+				return
+			default:
+				// The GPS time reference and coordinates are updated at `gpsUpdateRate`
+				err := wrapper.UpdateGPSData(m.ctx)
+				if err != nil {
+					errC <- errors.Wrap(err, "GPS update error")
+				}
 			}
 		}
-	}
+	}()
+	return errC
 }
 
 func (m *Manager) downlinkRoutine(bgCtx context.Context) {
@@ -206,62 +214,61 @@ func (m *Manager) downlinkRoutine(bgCtx context.Context) {
 	}
 }
 
-func (m *Manager) statusRoutine(bgCtx context.Context, errC chan error) {
-	for {
-		select {
-		case <-time.After(statusRoutineSleepRate):
-			rtt, err := m.netClient.Ping()
-			if err != nil {
-				errC <- errors.Wrap(err, "Network server health check error")
-				continue
-			}
+func (m *Manager) statusRoutine(bgCtx context.Context) chan error {
+	errC := make(chan error)
+	go func() {
+		for {
+			select {
+			case <-time.After(statusRoutineSleepRate):
+				rtt, err := m.netClient.Ping()
+				if err != nil {
+					errC <- errors.Wrap(err, "Network server health check error")
+					continue
+				}
 
-			status, err := m.statusMgr.GenerateStatus(rtt)
-			if err != nil {
-				errC <- errors.Wrap(err, "Gateway status computation error")
+				status, err := m.statusMgr.GenerateStatus(rtt)
+				if err != nil {
+					errC <- errors.Wrap(err, "Gateway status computation error")
+					return
+				}
+
+				err = m.netClient.SendStatus(*status)
+				if err != nil {
+					errC <- errors.Wrap(err, "Gateway status transmission error")
+					return
+				}
+			case <-bgCtx.Done():
 				return
 			}
-
-			err = m.netClient.SendStatus(*status)
-			if err != nil {
-				errC <- errors.Wrap(err, "Gateway status transmission error")
-				return
-			}
-		case <-bgCtx.Done():
-			return
 		}
-	}
+	}()
+	return errC
 }
 
-func (m *Manager) networkRoutine(bgCtx context.Context, errC chan error) {
-	err := m.netClient.RefreshRoutine(bgCtx)
-	if err != nil {
-		errC <- errors.Wrap(err, "Couldn't refresh account server token")
-	}
+func (m *Manager) networkRoutine(bgCtx context.Context) chan error {
+	errC := make(chan error)
+	go func() {
+		if err := m.netClient.RefreshRoutine(bgCtx); err != nil {
+			errC <- errors.Wrap(err, "Couldn't refresh account server token")
+		}
+	}()
+	return errC
 }
 
 func (m *Manager) startRoutines(bgCtx context.Context, err chan error, runTime time.Time) {
-	uplinkErrors := make(chan error)
-	defer close(uplinkErrors)
-	statusErrors := make(chan error)
-	defer close(statusErrors)
-	networkErrors := make(chan error)
-	defer close(networkErrors)
-	gpsErrors := make(chan error)
-	defer close(gpsErrors)
-
 	upCtx, upCancel := context.WithCancel(bgCtx)
 	downCtx, downCancel := context.WithCancel(bgCtx)
-	statsCtx, statsCancel := context.WithCancel(bgCtx)
+	statusCtx, statusCancel := context.WithCancel(bgCtx)
 	gpsCtx, gpsCancel := context.WithCancel(bgCtx)
 	networkCtx, networkCancel := context.WithCancel(bgCtx)
 
-	go m.uplinkRoutine(upCtx, uplinkErrors, runTime)
 	go m.downlinkRoutine(downCtx)
-	go m.statusRoutine(statsCtx, statusErrors)
-	go m.networkRoutine(networkCtx, networkErrors)
+	uplinkErrors := m.uplinkRoutine(upCtx, runTime)
+	statusErrors := m.statusRoutine(statusCtx)
+	networkErrors := m.networkRoutine(networkCtx)
+	var gpsErrors chan error
 	if m.isGPS {
-		go m.gpsRoutine(gpsCtx, gpsErrors)
+		gpsErrors = m.gpsRoutine(gpsCtx)
 	}
 	select {
 	case uplinkError := <-uplinkErrors:
@@ -278,7 +285,7 @@ func (m *Manager) startRoutines(bgCtx context.Context, err chan error, runTime t
 	upCancel()
 	gpsCancel()
 	downCancel()
-	statsCancel()
+	statusCancel()
 	networkCancel()
 }
 
