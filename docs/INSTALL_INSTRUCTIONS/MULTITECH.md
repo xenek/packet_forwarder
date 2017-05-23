@@ -6,7 +6,7 @@
 
 *Note: Before installing the new packet forwarder, make sure you removed any other packet forwarder installed on your Multitech Conduit.*
 
-1. Download the [Multitech Conduit package](https://ttnreleases.blob.core.windows.net/packet_forwarder/master/multitech-conduit-pktfwd.tar.gz) of the packet forwarder.
+1. Download the [Multitech Conduit package](https://ttnreleases.blob.core.windows.net/packet-forwarder/master/multitech-conduit-pktfwd.tar.gz) of the packet forwarder.
 
 2. In the archive, you will find an `create-package.sh` file, a `multitech-installer.sh`, as well as the executable binary. Execute the `create-package.sh` file, with the binary as a first argument:
 
