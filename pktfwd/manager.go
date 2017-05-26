@@ -156,6 +156,7 @@ func (m *Manager) uplinkRoutine(bgCtx context.Context, runStart time.Time) chan 
 			validPackets, err := wrapUplinkPayload(packets, m.ignoreCRC, m.netClient.GatewayID())
 			if err != nil {
 				continue
+
 			}
 			m.statusMgr.HandledRXBatch(len(validPackets), len(packets))
 			if len(validPackets) == 0 {
@@ -170,6 +171,7 @@ func (m *Manager) uplinkRoutine(bgCtx context.Context, runStart time.Time) chan 
 			select {
 			case <-bgCtx.Done():
 				errC <- nil
+				close(errC)
 				return
 			default:
 				continue
@@ -186,6 +188,7 @@ func (m *Manager) gpsRoutine(bgCtx context.Context) chan error {
 		for {
 			select {
 			case <-bgCtx.Done():
+				close(errC)
 				return
 			default:
 				// The GPS time reference and coordinates are updated at `gpsUpdateRate`
@@ -219,13 +222,14 @@ func (m *Manager) downlinkRoutine(bgCtx context.Context) {
 func (m *Manager) statusRoutine(bgCtx context.Context) chan error {
 	errC := make(chan error)
 	go func() {
+		defer close(errC)
 		for {
 			select {
 			case <-time.After(statusRoutineSleepRate):
 				rtt, err := m.netClient.Ping()
 				if err != nil {
 					errC <- errors.Wrap(err, "Network server health check error")
-					continue
+					return
 				}
 
 				status, err := m.statusMgr.GenerateStatus(rtt)
@@ -252,6 +256,8 @@ func (m *Manager) networkRoutine(bgCtx context.Context) chan error {
 	go func() {
 		if err := m.netClient.RefreshRoutine(bgCtx); err != nil {
 			errC <- errors.Wrap(err, "Couldn't refresh account server token")
+			close(errC)
+			return
 		}
 	}()
 	return errC
