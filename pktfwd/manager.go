@@ -151,13 +151,13 @@ func (m *Manager) uplinkRoutine(bgCtx context.Context, errc chan error, runStart
 			}
 		}
 
-		validPackets, err := wrapUplinkPayload(packets, m.ignoreCRC, m.netClient.GatewayID())
+		validPackets, err := wrapUplinkPayload(m.ctx, packets, m.ignoreCRC, m.netClient.GatewayID())
 		if err != nil {
 			continue
 		}
 		m.statusMgr.HandledRXBatch(len(validPackets), len(packets))
 		if len(validPackets) == 0 {
-			m.ctx.Warn("Packets received, but with invalid CRC - ignoring")
+			// Packets received, but with invalid CRC - ignoring
 			time.Sleep(m.uplinkPollingRate)
 			continue
 		}

@@ -5,6 +5,7 @@ package pktfwd
 import (
 	"errors"
 
+	"github.com/TheThingsNetwork/go-utils/log"
 	"github.com/TheThingsNetwork/packet_forwarder/wrapper"
 	"github.com/TheThingsNetwork/ttn/api/gateway"
 	"github.com/TheThingsNetwork/ttn/api/protocol"
@@ -107,22 +108,24 @@ func createUplinkMessage(gatewayID string, packet wrapper.Packet) (router.Uplink
 	return uplink, nil
 }
 
-func wrapUplinkPayload(packets []wrapper.Packet, ignoreCRC bool, gatewayID string) ([]router.UplinkMessage, error) {
+func wrapUplinkPayload(ctx log.Interface, packets []wrapper.Packet, ignoreCRC bool, gatewayID string) []router.UplinkMessage {
 	var messages = make([]router.UplinkMessage, 0, wrapper.NbMaxPackets)
 	// Iterating through every packet:
 	for _, inspectedPacket := range packets {
 		// First, we'll check the CRC is conform to the packets the gateway is configured to transmit
 		if !ignoreCRC && !acceptedCRC(inspectedPacket) {
+			ctx.Warn("Uplink packet received with an invalid CRC - ignoring")
 			continue
 		}
 
 		// Creating and filling the uplink message
 		message, err := createUplinkMessage(gatewayID, inspectedPacket)
 		if err != nil {
-			return nil, err
+			ctx.WithError(err).Error("Couldn't wrap uplink message to the TTN format")
+			continue
 		}
 		messages = append(messages, message)
 	}
 
-	return messages, nil
+	return messages
 }
