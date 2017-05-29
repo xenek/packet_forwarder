@@ -151,10 +151,7 @@ func (m *Manager) uplinkRoutine(bgCtx context.Context, errc chan error, runStart
 			}
 		}
 
-		validPackets, err := wrapUplinkPayload(m.ctx, packets, m.ignoreCRC, m.netClient.GatewayID())
-		if err != nil {
-			continue
-		}
+		validPackets := wrapUplinkPayload(m.ctx, packets, m.ignoreCRC, m.netClient.GatewayID())
 		m.statusMgr.HandledRXBatch(len(validPackets), len(packets))
 		if len(validPackets) == 0 {
 			// Packets received, but with invalid CRC - ignoring
