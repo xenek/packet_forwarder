@@ -3,7 +3,7 @@
 package pktfwd
 
 import (
-	"errors"
+	"fmt"
 
 	"github.com/TheThingsNetwork/go-utils/log"
 	"github.com/TheThingsNetwork/packet_forwarder/wrapper"
@@ -79,7 +79,7 @@ func initLoRaData(packet wrapper.Packet) (lorawan.Metadata, error) {
 	} else if packet.Modulation == wrapper.ModulationFSK {
 		loRaData = newFSKMetadata(packet)
 	} else {
-		return loRaData, errors.New("Received packet with unknown modulation")
+		return loRaData, fmt.Errorf("Received packet with unknown modulation (modulation value code: %v)", packet.Modulation)
 	}
 
 	return loRaData, nil
