@@ -9,9 +9,6 @@ package wrapper
 // #include "loragw_gps.h"
 import "C"
 import "errors"
-import "time"
-
-import "github.com/TheThingsNetwork/ttn/api/gateway"
 
 const NbMaxPackets = 8
 const nbRadios = C.LGW_RF_CHAIN_NB
@@ -46,36 +43,15 @@ var coderateString = map[uint8]string{
 	0:                    "OFF",
 }
 
-// gpsReference is used to pass the GPS reference when building packets
-type gpsReference struct {
-	valid              bool
-	validTimeReference bool
-	timeReference      C.struct_tref
-	locationReference  GPSCoordinates
-}
-
 func packetsFromCPackets(cPackets [8]C.struct_lgw_pkt_rx_s, nbPackets int) []Packet {
-	var packetReference gpsReference
-	if gpsActive() {
-		// Using one global gpsReference avoids having one mutex lock per packet
-		packetReference.valid = true
-		packetReference.validTimeReference = checkGPSTimeReference()
-		gpsTimeReferenceMutex.Lock()
-		packetReference.timeReference = gpsTimeReference
-		gpsTimeReferenceMutex.Unlock()
-		coordinatesMutex.Lock()
-		packetReference.locationReference = coordinates
-		coordinatesMutex.Unlock()
-	}
-
 	var packets = make([]Packet, nbPackets)
 	for i := 0; i < nbPackets && i < 8; i++ {
-		packets[i] = packetFromCPacket(cPackets[i], packetReference)
+		packets[i] = packetFromCPacket(cPackets[i])
 	}
 	return packets
 }
 
-func packetFromCPacket(cPacket C.struct_lgw_pkt_rx_s, currentReference gpsReference) Packet {
+func packetFromCPacket(cPacket C.struct_lgw_pkt_rx_s) Packet {
 	// When using packetFromCPacket, it is assumed that accessing gpsTimeReferenceMutex
 	// is safe => Use gpsTimeReferenceMutex before calling packetFromCPacket /before/
 	// using this function
@@ -101,21 +77,6 @@ func packetFromCPacket(cPacket C.struct_lgw_pkt_rx_s, currentReference gpsRefere
 	var i uint32
 	for i = 0; i < p.Size; i++ {
 		p.Payload[i] = byte(cPacket.payload[i])
-	}
-
-	if currentReference.valid {
-		p.Gps = &gateway.GPSMetadata{
-			Latitude:  float32(currentReference.locationReference.Latitude),
-			Longitude: float32(currentReference.locationReference.Longitude),
-			Altitude:  int32(currentReference.locationReference.Altitude),
-		}
-
-		var pktUtcTime C.struct_timespec
-		if currentReference.validTimeReference && C.lgw_cnt2utc(currentReference.timeReference, cPacket.count_us, &pktUtcTime) == C.LGW_GPS_SUCCESS {
-			// conversion successful
-			p.Time = time.Unix(int64(pktUtcTime.tv_sec), int64(pktUtcTime.tv_nsec)).UnixNano()
-			p.Gps.Time = p.Time
-		}
 	}
 	return p
 }

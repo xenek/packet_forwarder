@@ -18,6 +18,8 @@ import (
 // standardDownlinkSendMargin is the time we send a TX packet to the concentrator before its sending time.
 const standardDownlinkSendMargin = 100
 
+const defaultGPSDAddress = "localhost:2947"
+
 // downlinksMargin is specified at build. If it contains a numeric value, it is used as the number of
 // milliseconds of time margin. If no numeric value can be parsed, we use standardTimeMargin.
 var downlinksSendMargin = ""
@@ -73,6 +75,17 @@ var startCmd = &cobra.Command{
 			Version:             config.GetString("version"),
 			DownlinksSendMargin: time.Duration(config.GetInt64("downlink-send-margin")) * time.Millisecond,
 			IgnoreCRC:           ignoreCRC,
+			GPSPath:             config.GetString("gps-path"),
+		}
+
+		if config.GetBool("gpsd.enable") {
+			ttnConfig.GPSDAddress = config.GetString("gpsd.address")
+			if ttnConfig.GPSDAddress == "" {
+				// User filled in empty address - using default address
+				// Reason for this: later on in the application, an empty gpsd address means gpsd is
+				// not configured - and there is no reason for having an empty gpsd address
+				ttnConfig.GPSDAddress = defaultGPSDAddress
+			}
 		}
 
 		conf, err := pktfwd.FetchConfig(ctx, ttnConfig)
@@ -99,6 +112,10 @@ func init() {
 	startCmd.PersistentFlags().Int("reset-pin", 0, "GPIO pin associated to the reset pin of the board")
 	startCmd.PersistentFlags().BoolP("verbose", "v", false, "Show debug logs")
 	startCmd.PersistentFlags().Bool("ignore-crc", false, "Send packets upstream even if CRC validation is incorrect")
+
+	// gpsd configuration
+	startCmd.PersistentFlags().Bool("gpsd.enable", false, "Enable GPSD")
+	startCmd.PersistentFlags().String("gpsd.address", defaultGPSDAddress, "Address to the gpsd daemon")
 
 	viper.BindPFlags(startCmd.PersistentFlags())
 

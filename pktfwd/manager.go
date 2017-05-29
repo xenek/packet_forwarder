@@ -12,6 +12,7 @@ import (
 	"github.com/TheThingsNetwork/go-utils/log"
 	"github.com/TheThingsNetwork/packet_forwarder/util"
 	"github.com/TheThingsNetwork/packet_forwarder/wrapper"
+	"github.com/TheThingsNetwork/ttn/api/gateway"
 	"github.com/pkg/errors"
 )
 
@@ -34,17 +35,32 @@ type Manager struct {
 	// Concentrator boot time
 	bootTimeSetters     multipleBootTimeSetter
 	foundBootTime       bool
-	isGPS               bool
+	gps                 GPS
 	ignoreCRC           bool
 	downlinksSendMargin time.Duration
 }
 
-func NewManager(ctx log.Interface, conf util.Config, netClient NetworkClient, gpsPath string, runConfig TTNConfig) Manager {
-	isGPS := gpsPath != ""
-	statusMgr := NewStatusManager(ctx, netClient.FrequencyPlan(), runConfig.GatewayDescription, isGPS, netClient.DefaultLocation())
+func NewManager(ctx log.Interface, conf util.Config, netClient NetworkClient, runConfig TTNConfig) Manager {
+	var gpsd *gpsdGPS
+	var gps GPS
+	if runConfig.GPSDAddress != "" {
+		ctx.WithField("gpsdAddress", runConfig.GPSDAddress).Info("Activating gpsd")
+		gpsd = NewGPSDGPS(ctx, runConfig.GPSDAddress)
+		gps = gpsd
+	} else if runConfig.GPSPath != "" {
+		ctx.WithField("GPSPath", runConfig.GPSPath).Info("Activating GPS interface")
+		gps = NewHalGPS(ctx, runConfig.GPSPath)
+	} else {
+		ctx.Warn("No GPS configured, ignoring")
+	}
+
+	statusMgr := NewStatusManager(ctx, netClient.FrequencyPlan(), runConfig.GatewayDescription, gps, netClient.DefaultLocation())
 
 	bootTimeSetters := NewMultipleBootTimeSetter()
 	bootTimeSetters.Add(statusMgr)
+	if gpsd != nil {
+		bootTimeSetters.Add(gpsd)
+	}
 
 	return Manager{
 		ctx:             ctx,
@@ -52,7 +68,7 @@ func NewManager(ctx log.Interface, conf util.Config, netClient NetworkClient, gp
 		netClient:       netClient,
 		statusMgr:       statusMgr,
 		bootTimeSetters: bootTimeSetters,
-		isGPS:           isGPS,
+		gps:             gps,
 		// At the beginning, until we get our first uplinks, we keep a high polling rate to the concentrator
 		uplinkPollingRate:   initUplinkPollingRate,
 		downlinksSendMargin: runConfig.DownlinksSendMargin,
@@ -61,6 +77,16 @@ func NewManager(ctx log.Interface, conf util.Config, netClient NetworkClient, gp
 }
 
 func (m *Manager) run() error {
+	if m.gps != nil {
+		err := m.gps.Start()
+		if err != nil {
+			m.ctx.WithError(err).Warn("Couldn't start GPS")
+		} else {
+			m.ctx.Info("GPS started successfully")
+			defer m.gps.Stop()
+		}
+	}
+
 	runStart := time.Now()
 	m.ctx.WithField("DateTime", runStart).Info("Starting concentrator...")
 	err := wrapper.StartLoRaGateway()
@@ -86,7 +112,6 @@ func (m *Manager) handler(runStart time.Time) (err error) {
 	bgCtx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	routinesErr := m.startRoutines(bgCtx, runStart)
-	defer close(routinesErr)
 
 	// Finally, we'll listen to the different issues
 	select {
@@ -163,6 +188,27 @@ func (m *Manager) uplinkRoutine(bgCtx context.Context, runStart time.Time) chan 
 				continue
 			}
 
+			if m.gps != nil {
+				coord, err := m.gps.GetCoordinates()
+				if err != nil {
+					m.ctx.WithError(err).Warn("Couldn't get current GPS location data")
+					coord = &gateway.GPSMetadata{}
+				}
+
+				for _, uplink := range validPackets {
+					uplinkCoord := &gateway.GPSMetadata{}
+					*uplinkCoord = *coord
+					uplinkTime, err := m.gps.PacketTime(uplink)
+					if err != nil {
+						m.ctx.WithError(err).Warn("Couldn't compute GPS time data")
+					} else {
+						uplinkCoord.Time = int64(uplinkTime.UnixNano() / 1000)
+					}
+					uplink.GatewayMetadata.Gps = uplinkCoord
+					uplink.GatewayMetadata.Time = uplinkCoord.Time
+				}
+			}
+
 			m.ctx.WithField("NbValidPackets", len(validPackets)).Info("Sending valid uplink packets")
 			m.netClient.SendUplinks(validPackets)
 
@@ -172,27 +218,6 @@ func (m *Manager) uplinkRoutine(bgCtx context.Context, runStart time.Time) chan 
 				return
 			default:
 				continue
-			}
-		}
-	}()
-	return errC
-}
-
-func (m *Manager) gpsRoutine(bgCtx context.Context) chan error {
-	errC := make(chan error)
-	go func() {
-		m.ctx.Info("Starting GPS update routine")
-		defer close(errC)
-		for {
-			select {
-			case <-bgCtx.Done():
-				return
-			default:
-				// The GPS time reference and coordinates are updated at `gpsUpdateRate`
-				err := wrapper.UpdateGPSData(m.ctx)
-				if err != nil {
-					errC <- errors.Wrap(err, "GPS update error")
-				}
 			}
 		}
 	}()
@@ -266,17 +291,12 @@ func (m *Manager) startRoutines(bgCtx context.Context, runTime time.Time) chan e
 		upCtx, upCancel := context.WithCancel(bgCtx)
 		downCtx, downCancel := context.WithCancel(bgCtx)
 		statusCtx, statusCancel := context.WithCancel(bgCtx)
-		gpsCtx, gpsCancel := context.WithCancel(bgCtx)
 		networkCtx, networkCancel := context.WithCancel(bgCtx)
 
 		go m.downlinkRoutine(downCtx)
 		uplinkErrors := m.uplinkRoutine(upCtx, runTime)
 		statusErrors := m.statusRoutine(statusCtx)
 		networkErrors := m.networkRoutine(networkCtx)
-		var gpsErrors chan error
-		if m.isGPS {
-			gpsErrors = m.gpsRoutine(gpsCtx)
-		}
 		select {
 		case uplinkError := <-uplinkErrors:
 			err <- errors.Wrap(uplinkError, "Uplink routine error")
@@ -284,13 +304,11 @@ func (m *Manager) startRoutines(bgCtx context.Context, runTime time.Time) chan e
 			err <- errors.Wrap(statusError, "Status routine error")
 		case networkError := <-networkErrors:
 			err <- errors.Wrap(networkError, "Network routine error")
-		case gpsError := <-gpsErrors:
-			err <- errors.Wrap(gpsError, "GPS routine error")
 		case <-bgCtx.Done():
 			err <- nil
 		}
+		close(err)
 		upCancel()
-		gpsCancel()
 		downCancel()
 		statusCancel()
 		networkCancel()
