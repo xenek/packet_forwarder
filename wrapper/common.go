@@ -3,7 +3,7 @@
 package wrapper
 
 import (
-	"errors"
+	"fmt"
 
 	"github.com/TheThingsNetwork/ttn/api/gateway"
 )
@@ -42,19 +42,19 @@ func (p Packet) DatarateString() (string, error) {
 	if val, ok := datarateString[p.Datarate]; ok {
 		return val, nil
 	}
-	return "", errors.New("LoRa packet with unknown datarate")
+	return "", fmt.Errorf("LoRa packet with unknown datarate (datarate value code: %v)", p.Datarate)
 }
 
 func (p Packet) BandwidthString() (string, error) {
 	if val, ok := bandwidthString[p.Bandwidth]; ok {
 		return val, nil
 	}
-	return "", errors.New("LoRa packet with unknown bandwidth")
+	return "", fmt.Errorf("LoRa packet with unknown bandwidth (bandwidth value code: %v)", p.Bandwidth)
 }
 
 func (p Packet) CoderateString() (string, error) {
 	if val, ok := coderateString[p.Coderate]; ok {
 		return val, nil
 	}
-	return "", errors.New("LoRa packet with unknown coderate")
+	return "", fmt.Errorf("LoRa packet with unknown coderate (coderate value code: %v)", p.Coderate)
 }

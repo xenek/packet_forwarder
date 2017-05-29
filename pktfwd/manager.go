@@ -79,13 +79,14 @@ func (m *Manager) run() error {
 func (m *Manager) handler(runStart time.Time) (err error) {
 	// First, we'll handle the case when the user wants to end the program
 	c := make(chan os.Signal)
+	defer close(c)
 	signal.Notify(c, os.Interrupt, os.Kill, syscall.SIGABRT)
 
 	// We'll start the routines, and attach them a context
 	bgCtx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	var routinesErr = make(chan error)
-	go m.startRoutines(bgCtx, routinesErr, runStart)
+	routinesErr := m.startRoutines(bgCtx, runStart)
+	defer close(routinesErr)
 
 	// Finally, we'll listen to the different issues
 	select {
@@ -95,8 +96,6 @@ func (m *Manager) handler(runStart time.Time) (err error) {
 		m.ctx.Error("Program ended after one of the network links failed")
 	}
 
-	close(c)
-	close(routinesErr)
 	return err
 }
 
@@ -156,14 +155,10 @@ func (m *Manager) uplinkRoutine(bgCtx context.Context, runStart time.Time) chan 
 				}
 			}
 
-			validPackets, err := wrapUplinkPayload(packets, m.ignoreCRC, m.netClient.GatewayID())
-			if err != nil {
-				continue
-
-			}
+			validPackets := wrapUplinkPayload(m.ctx, packets, m.ignoreCRC, m.netClient.GatewayID())
 			m.statusMgr.HandledRXBatch(len(validPackets), len(packets))
 			if len(validPackets) == 0 {
-				m.ctx.Warn("Packets received, but with invalid CRC - ignoring")
+				// Packets received, but with invalid CRC - ignoring
 				time.Sleep(m.uplinkPollingRate)
 				continue
 			}
@@ -264,38 +259,42 @@ func (m *Manager) networkRoutine(bgCtx context.Context) chan error {
 	return errC
 }
 
-func (m *Manager) startRoutines(bgCtx context.Context, err chan error, runTime time.Time) {
-	upCtx, upCancel := context.WithCancel(bgCtx)
-	downCtx, downCancel := context.WithCancel(bgCtx)
-	statusCtx, statusCancel := context.WithCancel(bgCtx)
-	gpsCtx, gpsCancel := context.WithCancel(bgCtx)
-	networkCtx, networkCancel := context.WithCancel(bgCtx)
+func (m *Manager) startRoutines(bgCtx context.Context, runTime time.Time) chan error {
+	err := make(chan error)
+	go func() {
+		upCtx, upCancel := context.WithCancel(bgCtx)
+		downCtx, downCancel := context.WithCancel(bgCtx)
+		statusCtx, statusCancel := context.WithCancel(bgCtx)
+		gpsCtx, gpsCancel := context.WithCancel(bgCtx)
+		networkCtx, networkCancel := context.WithCancel(bgCtx)
 
-	go m.downlinkRoutine(downCtx)
-	uplinkErrors := m.uplinkRoutine(upCtx, runTime)
-	statusErrors := m.statusRoutine(statusCtx)
-	networkErrors := m.networkRoutine(networkCtx)
-	var gpsErrors chan error
-	if m.isGPS {
-		gpsErrors = m.gpsRoutine(gpsCtx)
-	}
-	select {
-	case uplinkError := <-uplinkErrors:
-		err <- errors.Wrap(uplinkError, "Uplink routine error")
-	case statusError := <-statusErrors:
-		err <- errors.Wrap(statusError, "Status routine error")
-	case networkError := <-networkErrors:
-		err <- errors.Wrap(networkError, "Network routine error")
-	case gpsError := <-gpsErrors:
-		err <- errors.Wrap(gpsError, "GPS routine error")
-	case <-bgCtx.Done():
-		err <- nil
-	}
-	upCancel()
-	gpsCancel()
-	downCancel()
-	statusCancel()
-	networkCancel()
+		go m.downlinkRoutine(downCtx)
+		uplinkErrors := m.uplinkRoutine(upCtx, runTime)
+		statusErrors := m.statusRoutine(statusCtx)
+		networkErrors := m.networkRoutine(networkCtx)
+		var gpsErrors chan error
+		if m.isGPS {
+			gpsErrors = m.gpsRoutine(gpsCtx)
+		}
+		select {
+		case uplinkError := <-uplinkErrors:
+			err <- errors.Wrap(uplinkError, "Uplink routine error")
+		case statusError := <-statusErrors:
+			err <- errors.Wrap(statusError, "Status routine error")
+		case networkError := <-networkErrors:
+			err <- errors.Wrap(networkError, "Network routine error")
+		case gpsError := <-gpsErrors:
+			err <- errors.Wrap(gpsError, "GPS routine error")
+		case <-bgCtx.Done():
+			err <- nil
+		}
+		upCancel()
+		gpsCancel()
+		downCancel()
+		statusCancel()
+		networkCancel()
+	}()
+	return err
 }
 
 func (m *Manager) shutdown() error {

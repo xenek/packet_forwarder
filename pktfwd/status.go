@@ -70,8 +70,8 @@ func (s *statusManager) SentTX() {
 }
 
 func (s *statusManager) HandledRXBatch(received, valid int) {
-	atomic.AddUint32(&s.rxIn, 1)
-	atomic.AddUint32(&s.rxOk, 1)
+	atomic.AddUint32(&s.rxIn, uint32(received))
+	atomic.AddUint32(&s.rxOk, uint32(valid))
 }
 
 func getOSInfo() *gateway.Status_OSMetrics {
