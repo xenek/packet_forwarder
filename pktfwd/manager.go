@@ -95,6 +95,8 @@ func (m *Manager) handler(runStart time.Time) (err error) {
 		m.ctx.Error("Program ended after one of the network links failed")
 	}
 
+	close(c)
+	close(routinesErr)
 	return err
 }
 
@@ -132,6 +134,7 @@ func (m *Manager) uplinkRoutine(bgCtx context.Context, runStart time.Time) chan 
 	errC := make(chan error)
 	go func() {
 		m.ctx.Info("Waiting for uplink packets")
+		defer close(errC)
 		for {
 			packets, err := wrapper.Receive()
 			if err != nil {
@@ -171,7 +174,6 @@ func (m *Manager) uplinkRoutine(bgCtx context.Context, runStart time.Time) chan 
 			select {
 			case <-bgCtx.Done():
 				errC <- nil
-				close(errC)
 				return
 			default:
 				continue
@@ -185,10 +187,10 @@ func (m *Manager) gpsRoutine(bgCtx context.Context) chan error {
 	errC := make(chan error)
 	go func() {
 		m.ctx.Info("Starting GPS update routine")
+		defer close(errC)
 		for {
 			select {
 			case <-bgCtx.Done():
-				close(errC)
 				return
 			default:
 				// The GPS time reference and coordinates are updated at `gpsUpdateRate`
@@ -254,10 +256,9 @@ func (m *Manager) statusRoutine(bgCtx context.Context) chan error {
 func (m *Manager) networkRoutine(bgCtx context.Context) chan error {
 	errC := make(chan error)
 	go func() {
+		defer close(errC)
 		if err := m.netClient.RefreshRoutine(bgCtx); err != nil {
 			errC <- errors.Wrap(err, "Couldn't refresh account server token")
-			close(errC)
-			return
 		}
 	}()
 	return errC
