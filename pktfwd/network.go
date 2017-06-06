@@ -451,6 +451,7 @@ func (c *TTNClient) SendStatus(status gateway.Status) error {
 		"Latitude":          status.GetGps().GetLatitude(),
 		"Longitude":         status.GetGps().GetLongitude(),
 		"Altitude":          status.GetGps().GetAltitude(),
+		"RTT":               status.GetRtt(),
 	}).Info("Sending status to the network server")
 	err = c.statusStream.Send(&status)
 	if err != nil {

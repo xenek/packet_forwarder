@@ -224,6 +224,7 @@ func (m *Manager) statusRoutine(bgCtx context.Context) chan error {
 			select {
 			case <-time.After(statusRoutineSleepRate):
 				rtt, err := m.netClient.Ping()
+				m.ctx.WithField("RTT", rtt).Debug("Ping to the router successful")
 				if err != nil {
 					errC <- errors.Wrap(err, "Network server health check error")
 					return
