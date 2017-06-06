@@ -135,7 +135,7 @@ func (s *statusManager) GenerateStatus(rtt time.Duration) (*gateway.Status, erro
 		// Contact-email: TODO once it has been implemented on the account server
 		ContactEmail: "",
 		Description:  s.gatewayDescription,
-		Rtt:          uint32((rtt.Nanoseconds() / 1000000) / (1 << 32)),
+		Rtt:          uint32(rtt.Nanoseconds() / 1000000),
 		RxIn:         atomic.LoadUint32(&s.rxIn),
 		RxOk:         atomic.LoadUint32(&s.rxOk),
 		TxIn:         atomic.LoadUint32(&s.txIn),
