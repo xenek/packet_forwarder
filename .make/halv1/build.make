@@ -9,7 +9,7 @@ else
 endif
 
 # Build the HAL
-hal.build: lora_gateway/libloragw/libloragw.a
+hal.build: lora_gateway/libloragw/inc/$(PLATFORM).h lora_gateway/libloragw/libloragw.a
 
 ### library.cfg configuration file processing
 
