@@ -4,7 +4,7 @@ To follow this manual, you must have a Raspberry Pi with an IMST ic880a board, c
 
 ## Download and run
 
-1. Download the [Raspberry Pi + IMST build](https://ttnreleases.blob.core.windows.net/packet_forwarder/master/imst-rpi-pktfwd.zip) of the packet forwarder.
+1. Download the [Raspberry Pi + IMST build](https://ttnreleases.blob.core.windows.net/packet-forwarder/master/imst-rpi-pktfwd.tar.gz) of the packet forwarder.
 
 2. Configure the packet forwarder:
 

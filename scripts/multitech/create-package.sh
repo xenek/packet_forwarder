@@ -196,6 +196,7 @@ configure() {
         touch \"\$conf_dir/config.yml\"
         \$pkt_fwd configure \"\$conf_dir/config.yml\" --config=\"\$conf_dir/config.yml\"
     fi
+    update-rc.d ttn-pkt-fwd defaults
     exit
 }
 
