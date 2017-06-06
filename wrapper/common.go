@@ -42,19 +42,19 @@ func (p Packet) DatarateString() (string, error) {
 	if val, ok := datarateString[p.Datarate]; ok {
 		return val, nil
 	}
-	return "", fmt.Errorf("LoRa packet with unknown datarate (datarate value code: %v)", p.Datarate)
+	return "", fmt.Errorf("LoRa packet with unknown datarate code %v", p.Datarate)
 }
 
 func (p Packet) BandwidthString() (string, error) {
 	if val, ok := bandwidthString[p.Bandwidth]; ok {
 		return val, nil
 	}
-	return "", fmt.Errorf("LoRa packet with unknown bandwidth (bandwidth value code: %v)", p.Bandwidth)
+	return "", fmt.Errorf("LoRa packet with unknown bandwidth code %v", p.Bandwidth)
 }
 
 func (p Packet) CoderateString() (string, error) {
 	if val, ok := coderateString[p.Coderate]; ok {
 		return val, nil
 	}
-	return "", fmt.Errorf("LoRa packet with unknown coderate (coderate value code: %v)", p.Coderate)
+	return "", fmt.Errorf("LoRa packet with unknown coderate code %v", p.Coderate)
 }

@@ -163,7 +163,7 @@ func (m *Manager) uplinkRoutine(bgCtx context.Context, runStart time.Time) chan 
 				continue
 			}
 
-			m.ctx.WithField("NbValidPackets", len(validPackets)).Info("Received valid packets - sending them to the back-end")
+			m.ctx.WithField("NbValidPackets", len(validPackets)).Info("Sending valid uplink packets")
 			m.netClient.SendUplinks(validPackets)
 
 			select {

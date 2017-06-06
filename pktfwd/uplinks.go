@@ -79,7 +79,7 @@ func initLoRaData(packet wrapper.Packet) (lorawan.Metadata, error) {
 	} else if packet.Modulation == wrapper.ModulationFSK {
 		loRaData = newFSKMetadata(packet)
 	} else {
-		return loRaData, fmt.Errorf("Received packet with unknown modulation (modulation value code: %v)", packet.Modulation)
+		return loRaData, fmt.Errorf("Received packet with unknown modulation code: %v", packet.Modulation)
 	}
 
 	return loRaData, nil

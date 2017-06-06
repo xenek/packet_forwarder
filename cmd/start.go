@@ -61,7 +61,7 @@ var startCmd = &cobra.Command{
 
 		ignoreCRC := config.GetBool("ignore-crc")
 		if ignoreCRC {
-			ctx.Warn("CRC check disabled, packets with invalid CRC will be sent upstream.")
+			ctx.Warn("CRC check disabled, packets with invalid CRC will be sent upstream")
 		}
 
 		ttnConfig := &pktfwd.TTNConfig{
