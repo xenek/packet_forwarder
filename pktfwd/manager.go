@@ -40,7 +40,7 @@ type Manager struct {
 	downlinksSendMargin time.Duration
 }
 
-func NewManager(ctx log.Interface, conf util.Config, netClient NetworkClient, runConfig TTNConfig) Manager {
+func NewManager(ctx log.Interface, conf util.Config, netClient NetworkClient, runConfig TTNConfig) *Manager {
 	var gpsd *gpsdGPS
 	var gps GPS
 	if runConfig.GPSDAddress != "" {
@@ -62,7 +62,7 @@ func NewManager(ctx log.Interface, conf util.Config, netClient NetworkClient, ru
 		bootTimeSetters.Add(gpsd)
 	}
 
-	return Manager{
+	return &Manager{
 		ctx:             ctx,
 		conf:            conf,
 		netClient:       netClient,
@@ -198,14 +198,12 @@ func (m *Manager) uplinkRoutine(bgCtx context.Context, runStart time.Time) chan 
 				for _, uplink := range validPackets {
 					uplinkCoord := &gateway.GPSMetadata{}
 					*uplinkCoord = *coord
-					uplinkTime, err := m.gps.PacketTime(uplink)
-					if err != nil {
+					if uplinkTime, err := m.gps.PacketTime(uplink); err != nil {
 						m.ctx.WithError(err).Warn("Couldn't compute GPS time data")
 					} else {
 						uplinkCoord.Time = int64(uplinkTime.UnixNano() / 1000)
 					}
 					uplink.GatewayMetadata.Gps = uplinkCoord
-					uplink.GatewayMetadata.Time = uplinkCoord.Time
 				}
 			}
 

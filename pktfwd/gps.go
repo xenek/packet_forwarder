@@ -30,18 +30,14 @@ type GPS interface {
 
 type halGPS struct {
 	ctx     log.Interface
-	BgCtx   context.Context
-	Cancel  context.CancelFunc
-	GPSPath string
+	cancel  context.CancelFunc
+	gpspath string
 }
 
 func NewHalGPS(ctx log.Interface, gpsPath string) GPS {
-	bgCtx, cancel := context.WithCancel(context.Background())
 	return &halGPS{
 		ctx:     ctx,
-		BgCtx:   bgCtx,
-		Cancel:  cancel,
-		GPSPath: gpsPath,
+		gpspath: gpsPath,
 	}
 }
 
@@ -59,7 +55,10 @@ func (g *halGPS) GetCoordinates() (*gateway.GPSMetadata, error) {
 }
 
 func (g *halGPS) Start() error {
-	err := wrapper.LoRaGPSEnable(g.GPSPath)
+	bgCtx, cancel := context.WithCancel(context.Background())
+	g.cancel = cancel
+
+	err := wrapper.LoRaGPSEnable(g.gpspath)
 	if err != nil {
 		return err
 	}
@@ -67,10 +66,9 @@ func (g *halGPS) Start() error {
 	go func() {
 		for {
 			select {
-			case <-g.BgCtx.Done():
+			case <-bgCtx.Done():
 				return
 			case <-time.After(gpsUpdateRate):
-				// The GPS time reference and coordinates are updated at `gpsUpdateRate`
 				err := wrapper.UpdateGPSData(g.ctx)
 				if err != nil {
 					g.ctx.WithError(err).Warn("GPS update error")
@@ -83,8 +81,9 @@ func (g *halGPS) Start() error {
 }
 
 func (g *halGPS) Stop() {
-	g.Cancel()
-	return
+	if g.cancel != nil {
+		g.cancel()
+	}
 }
 
 func (g *halGPS) PacketTime(uplink router.UplinkMessage) (time.Time, error) {
@@ -95,7 +94,7 @@ func (g *halGPS) PacketTime(uplink router.UplinkMessage) (time.Time, error) {
 type gpsdGPS struct {
 	sync.Mutex
 	ctx                      log.Interface
-	GPSDAddress              string
+	gpsdAddress              string
 	stop                     context.CancelFunc
 	latestReport             *gpsd.TPVReport
 	latestReportTime         *time.Time
@@ -104,7 +103,7 @@ type gpsdGPS struct {
 }
 
 func (g *gpsdGPS) Start() error {
-	sess, err := gpsd.Dial(g.GPSDAddress)
+	sess, err := gpsd.Dial(g.gpsdAddress)
 	if err != nil {
 		return errors.Wrap(err, "Couldn't open GPSD")
 	}
@@ -134,7 +133,6 @@ func (g *gpsdGPS) Start() error {
 
 func (g *gpsdGPS) Stop() {
 	g.stop()
-	return
 }
 
 func (g *gpsdGPS) GetCoordinates() (*gateway.GPSMetadata, error) {
@@ -181,7 +179,7 @@ func (g *gpsdGPS) PacketTime(uplink router.UplinkMessage) (time.Time, error) {
 func NewGPSDGPS(ctx log.Interface, address string) *gpsdGPS {
 	return &gpsdGPS{
 		ctx:                      ctx,
-		GPSDAddress:              address,
+		gpsdAddress:              address,
 		concentratorBootTimeLock: sync.Mutex{},
 	}
 }

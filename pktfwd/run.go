@@ -15,12 +15,9 @@ func Run(ctx log.Interface, conf util.Config, ttnConfig TTNConfig, gpsPath strin
 		return errors.Wrap(err, "Network configuration failure")
 	}
 
-	// applying configuration to the board
 	if err := configureBoard(ctx, conf); err != nil {
 		return errors.Wrap(err, "Board configuration failure")
 	}
 
-	// Creating manager
-	var mgr = NewManager(ctx, conf, networkCli, ttnConfig)
-	return mgr.run()
+	return NewManager(ctx, conf, networkCli, ttnConfig).run()
 }
