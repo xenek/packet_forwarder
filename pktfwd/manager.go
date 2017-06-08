@@ -39,12 +39,13 @@ type Manager struct {
 	downlinksSendMargin time.Duration
 }
 
-func NewManager(ctx log.Interface, conf util.Config, netClient NetworkClient, gpsPath string, runConfig TTNConfig) Manager {
+func NewManager(ctx log.Interface, conf util.Config, netClient *TTNClient, gpsPath string, runConfig TTNConfig) Manager {
 	isGPS := gpsPath != ""
 	statusMgr := NewStatusManager(ctx, netClient.FrequencyPlan(), runConfig.GatewayDescription, isGPS, netClient.DefaultLocation())
 
 	bootTimeSetters := NewMultipleBootTimeSetter()
 	bootTimeSetters.Add(statusMgr)
+	bootTimeSetters.Add(netClient)
 
 	return Manager{
 		ctx:             ctx,

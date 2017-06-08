@@ -41,7 +41,6 @@ type TTNClient struct {
 	routerConn      *grpc.ClientConn
 	ctx             log.Interface
 	uplinkStream    router.UplinkStream
-	uplinkMutex     sync.Mutex
 	downlinkStream  router.DownlinkStream
 	statusStream    router.GatewayStatusStream
 	account         *account.Account
@@ -49,9 +48,11 @@ type TTNClient struct {
 	connected       bool
 	networkMutex    *sync.Mutex
 	streamsMutex    *sync.Mutex
+	bootTimeMutex   *sync.Mutex
 	token           string
 	tokenExpiry     time.Time
 	frequencyPlan   string
+	bootTime        *time.Time
 	// Communication between internal goroutines
 	stopDownlinkQueue          chan bool
 	stopUplinkQueue            chan bool
@@ -76,6 +77,12 @@ type NetworkClient interface {
 
 func (c *TTNClient) GatewayID() string {
 	return c.runConfig.ID
+}
+
+func (c *TTNClient) SetBootTime(t time.Time) {
+	c.bootTimeMutex.Lock()
+	c.bootTime = &t
+	c.bootTimeMutex.Unlock()
 }
 
 type RouterHealthCheck struct {
@@ -343,7 +350,7 @@ func (c *TTNClient) RefreshRoutine(ctx context.Context) error {
 	}
 }
 
-func CreateNetworkClient(ctx log.Interface, ttnConfig TTNConfig) (NetworkClient, error) {
+func CreateNetworkClient(ctx log.Interface, ttnConfig TTNConfig) (*TTNClient, error) {
 	var client = &TTNClient{
 		ctx:                  ctx,
 		runConfig:            ttnConfig,
@@ -351,6 +358,7 @@ func CreateNetworkClient(ctx log.Interface, ttnConfig TTNConfig) (NetworkClient,
 		uplinkQueue:          make(chan *router.UplinkMessage, uplinksBufferSize),
 		networkMutex:         &sync.Mutex{},
 		streamsMutex:         &sync.Mutex{},
+		bootTimeMutex:        &sync.Mutex{},
 		stopDownlinkQueue:    make(chan bool),
 		stopUplinkQueue:      make(chan bool),
 		downlinkStreamChange: make(chan bool),
@@ -428,7 +436,13 @@ func (c *TTNClient) SendUplinks(messages []router.UplinkMessage) {
 
 func (c *TTNClient) SendStatus(status gateway.Status) error {
 	status.Region = c.frequencyPlan
-	c.ctx.WithFields(log.Fields{
+	ctx := c.ctx
+	c.bootTimeMutex.Lock()
+	if c.bootTime != nil {
+		ctx = ctx.WithField("Uptime", time.Since(*c.bootTime))
+	}
+	c.bootTimeMutex.Unlock()
+	ctx.WithFields(log.Fields{
 		"TXPacketsReceived": status.GetTxIn(),
 		"TXPacketsValid":    status.GetTxOk(),
 		"RXPacketsReceived": status.GetRxIn(),
