@@ -11,14 +11,13 @@ import (
 	"github.com/TheThingsNetwork/packet_forwarder/pktfwd"
 	"github.com/TheThingsNetwork/packet_forwarder/util"
 	"github.com/TheThingsNetwork/packet_forwarder/wrapper"
+	gpsd "github.com/dotpy3/go-gpsd"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
 
 // standardDownlinkSendMargin is the time we send a TX packet to the concentrator before its sending time.
 const standardDownlinkSendMargin = 100
-
-const defaultGPSDAddress = "localhost:2947"
 
 // downlinksMargin is specified at build. If it contains a numeric value, it is used as the number of
 // milliseconds of time margin. If no numeric value can be parsed, we use standardTimeMargin.
@@ -84,7 +83,7 @@ var startCmd = &cobra.Command{
 				// User filled in empty address - using default address
 				// Reason for this: later on in the application, an empty gpsd address means gpsd is
 				// not configured - and there is no reason for having an empty gpsd address
-				ttnConfig.GPSDAddress = defaultGPSDAddress
+				ttnConfig.GPSDAddress = gpsd.DefaultAddress
 			}
 		}
 
@@ -115,7 +114,7 @@ func init() {
 
 	// gpsd configuration
 	startCmd.PersistentFlags().Bool("gpsd.enable", false, "Enable GPSD")
-	startCmd.PersistentFlags().String("gpsd.address", defaultGPSDAddress, "Address to the gpsd daemon")
+	startCmd.PersistentFlags().String("gpsd.address", gpsd.DefaultAddress, "Address to the gpsd daemon")
 
 	viper.BindPFlags(startCmd.PersistentFlags())
 
