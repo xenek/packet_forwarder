@@ -4,7 +4,6 @@ package pktfwd
 
 import (
 	"context"
-	"fmt"
 	"math"
 	"sync"
 	"time"
@@ -428,21 +427,13 @@ func (c *TTNClient) SendUplinks(messages []router.UplinkMessage) {
 }
 
 func (c *TTNClient) SendStatus(status gateway.Status) error {
-	var uptimeString string
 	status.Region = c.frequencyPlan
-	uptimeDuration, err := time.ParseDuration(fmt.Sprintf("%dus", status.GetTimestamp()))
-	if err == nil {
-		uptimeString = uptimeDuration.String()
-	} else {
-		uptimeString = fmt.Sprintf("%fs", float32(status.GetTimestamp())/1000000.0)
-	}
 	c.ctx.WithFields(log.Fields{
 		"TXPacketsReceived": status.GetTxIn(),
 		"TXPacketsValid":    status.GetTxOk(),
 		"RXPacketsReceived": status.GetRxIn(),
 		"RXPacketsValid":    status.GetRxOk(),
 		"FrequencyPlan":     status.GetRegion(),
-		"Uptime":            uptimeString,
 		"Load1":             status.GetOs().GetLoad_1(),
 		"Load5":             status.GetOs().GetLoad_5(),
 		"Load15":            status.GetOs().GetLoad_15(),
@@ -453,7 +444,7 @@ func (c *TTNClient) SendStatus(status gateway.Status) error {
 		"Altitude":          status.GetGps().GetAltitude(),
 		"RTT":               status.GetRtt(),
 	}).Info("Sending status to the network server")
-	err = c.statusStream.Send(&status)
+	err := c.statusStream.Send(&status)
 	if err != nil {
 		return errors.Wrap(err, "Status stream error")
 	}
