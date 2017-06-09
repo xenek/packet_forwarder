@@ -35,6 +35,8 @@ type TTNConfig struct {
 	GatewayDescription  string
 	DownlinksSendMargin time.Duration
 	IgnoreCRC           bool
+	GPSPath             string
+	GPSDAddress         string
 }
 
 type TTNClient struct {

@@ -11,6 +11,7 @@ import (
 	"github.com/TheThingsNetwork/packet_forwarder/pktfwd"
 	"github.com/TheThingsNetwork/packet_forwarder/util"
 	"github.com/TheThingsNetwork/packet_forwarder/wrapper"
+	gpsd "github.com/dotpy3/go-gpsd"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
@@ -73,6 +74,17 @@ var startCmd = &cobra.Command{
 			Version:             config.GetString("version"),
 			DownlinksSendMargin: time.Duration(config.GetInt64("downlink-send-margin")) * time.Millisecond,
 			IgnoreCRC:           ignoreCRC,
+			GPSPath:             config.GetString("gps-path"),
+		}
+
+		if config.GetBool("gpsd.enable") {
+			ttnConfig.GPSDAddress = config.GetString("gpsd.address")
+			if ttnConfig.GPSDAddress == "" {
+				// User filled in empty address - using default address
+				// Reason for this: later on in the application, an empty gpsd address means gpsd is
+				// not configured - and there is no reason for having an empty gpsd address
+				ttnConfig.GPSDAddress = gpsd.DefaultAddress
+			}
 		}
 
 		conf, err := pktfwd.FetchConfig(ctx, ttnConfig)
@@ -99,6 +111,9 @@ func init() {
 	startCmd.PersistentFlags().Int("reset-pin", 0, "GPIO pin associated to the reset pin of the board")
 	startCmd.PersistentFlags().BoolP("verbose", "v", false, "Show debug logs")
 	startCmd.PersistentFlags().Bool("ignore-crc", false, "Send packets upstream even if CRC validation is incorrect")
+
+	startCmd.PersistentFlags().Bool("gpsd.enable", false, "Enable GPSD")
+	startCmd.PersistentFlags().String("gpsd.address", gpsd.DefaultAddress, "Address to the gpsd daemon")
 
 	viper.BindPFlags(startCmd.PersistentFlags())
 

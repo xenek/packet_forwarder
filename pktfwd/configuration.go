@@ -14,7 +14,7 @@ import (
 // ignore the frequency plan value of `clksrc`.
 var platform = ""
 
-func configureBoard(ctx log.Interface, conf util.Config, gpsPath string) error {
+func configureBoard(ctx log.Interface, conf util.Config) error {
 	if platform == "multitech" {
 		ctx.Info("Forcing clock source to 0 (Multitech concentrator)")
 		conf.Concentrator.Clksrc = 0
@@ -26,11 +26,6 @@ func configureBoard(ctx log.Interface, conf util.Config, gpsPath string) error {
 	}
 
 	err = configureChannels(ctx, conf)
-	if err != nil {
-		return err
-	}
-
-	err = enableGPS(ctx, gpsPath)
 	if err != nil {
 		return err
 	}

@@ -219,6 +219,12 @@
 			"revisionTime": "2017-02-01T22:58:49Z"
 		},
 		{
+			"checksumSHA1": "yIJRw2F+8wAvC0sg/qviPbpQN6o=",
+			"path": "github.com/dotpy3/go-gpsd",
+			"revision": "4cb31c28593d14dbcbbc474afa3c3b335d0902a9",
+			"revisionTime": "2017-06-07T14:50:49Z"
+		},
+		{
 			"checksumSHA1": "JhI3dzfib2NMGL11NiUswioZP8U=",
 			"path": "github.com/fsnotify/fsnotify",
 			"revision": "a904159b9206978bb6d53fcc7a769e5cd726c737",
