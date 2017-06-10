@@ -11,6 +11,7 @@ import (
 
 	"github.com/TheThingsNetwork/go-account-lib/account"
 	"github.com/TheThingsNetwork/go-utils/log"
+	"github.com/TheThingsNetwork/packet_forwarder/util"
 	"github.com/TheThingsNetwork/ttn/api/discovery"
 	"github.com/TheThingsNetwork/ttn/api/fields"
 	"github.com/TheThingsNetwork/ttn/api/gateway"
@@ -282,6 +283,12 @@ func (c *TTNClient) queueUplinks() {
 			return
 		case uplink := <-c.uplinkQueue:
 			ctx := c.ctx.WithFields(fields.Get(uplink))
+			if devAddr, err := util.GetDevAddr(uplink); err == nil {
+				ctx = ctx.WithField("DevAddr", devAddr)
+			} else {
+				ctx.WithError(err).Debug("Couldn't identify this uplink's device's DevAddr")
+			}
+
 			if err := c.uplinkStream.Send(uplink); err != nil {
 				ctx.WithError(err).Warn("Uplink message transmission to the back-end failed.")
 			} else {
