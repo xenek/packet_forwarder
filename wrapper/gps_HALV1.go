@@ -156,3 +156,20 @@ func UpdateGPSData(ctx log.Interface) error {
 	coordinatesMutex.Unlock()
 	return nil
 }
+
+func GetPacketTime(ts uint32) (time.Time, error) {
+	if ok := checkGPSTimeReference(); !ok {
+		return time.Time{}, errors.New("Invalid GPS time reference")
+	}
+
+	gpsTimeReferenceMutex.Lock()
+	timeReference := gpsTimeReference
+	gpsTimeReferenceMutex.Unlock()
+
+	var pktUtcTime C.struct_timespec
+	if C.lgw_cnt2utc(timeReference, C.uint32_t(ts), &pktUtcTime) != C.LGW_GPS_SUCCESS {
+		return time.Time{}, errors.New("HAL couldn't compute exact time from GPS time reference")
+	}
+
+	return time.Unix(int64(pktUtcTime.tv_sec), int64(pktUtcTime.tv_nsec)), nil
+}

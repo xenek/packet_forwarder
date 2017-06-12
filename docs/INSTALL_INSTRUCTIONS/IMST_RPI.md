@@ -20,6 +20,16 @@ $ <packet-forwarder-binary> configure
 $ <packet-forwarder-binary> start
 ```
 
+#### Pin reset
+
+Raspberry Pi setups require resetting the concentrator before startup. The `--reset-pin` flag allows you to indicate a BCM pin number to reset before startup:
+
+```bash
+$ <packet-forwarder-binary> start --reset-pin
+```
+
+You can also add it to the configuration file, as `reset-pin: <value>`.
+
 ### Permanent installation with systemd
 
 If you want a permanent installation of the packet forwarder on your Raspberry Pi, with `systemd` managing the packet forwarder on the background, we provide a basic systemd installation script, `install-systemd.sh`.

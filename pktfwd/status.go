@@ -11,7 +11,6 @@ import (
 	"github.com/TheThingsNetwork/go-account-lib/account"
 	"github.com/TheThingsNetwork/go-utils/log"
 	"github.com/TheThingsNetwork/packet_forwarder/util"
-	"github.com/TheThingsNetwork/packet_forwarder/wrapper"
 	"github.com/TheThingsNetwork/ttn/api/gateway"
 	"github.com/pkg/errors"
 	"github.com/shirou/gopsutil/cpu"
@@ -27,14 +26,14 @@ type StatusManager interface {
 	GenerateStatus(rtt time.Duration) (*gateway.Status, error)
 }
 
-func NewStatusManager(ctx log.Interface, frequencyPlan string, gatewayDescription string, isGPSChip bool, antennaLocation *account.AntennaLocation) StatusManager {
+func NewStatusManager(ctx log.Interface, frequencyPlan string, gatewayDescription string, gps GPS, antennaLocation *account.AntennaLocation) StatusManager {
 	if antennaLocation == nil {
 		ctx.Warn("Antenna location unavailable from the account server")
 	}
 	return &statusManager{
 		antennaLocation:    antennaLocation,
 		ctx:                ctx,
-		isGPSChip:          isGPSChip,
+		gps:                gps,
 		rxIn:               0,
 		rxOk:               0,
 		txIn:               0,
@@ -47,7 +46,7 @@ func NewStatusManager(ctx log.Interface, frequencyPlan string, gatewayDescriptio
 type statusManager struct {
 	antennaLocation    *account.AntennaLocation
 	ctx                log.Interface
-	isGPSChip          bool
+	gps                GPS
 	rxIn               uint32
 	rxOk               uint32
 	txIn               uint32
@@ -156,20 +155,16 @@ func (s *statusManager) GenerateStatus(rtt time.Duration) (*gateway.Status, erro
 		}
 	}
 
-	if s.isGPSChip { // GPS chip available
-		gpsChipCoordinates, err := wrapper.GetGPSCoordinates()
+	status.Gps = coordinates
+
+	if s.gps != nil {
+		coord, err := s.gps.GetCoordinates()
 		if err != nil {
 			s.ctx.WithError(err).Warn("Unable to retrieve GPS coordinates from the GPS hardware")
 		} else {
-			coordinates = &gateway.GPSMetadata{
-				Latitude:  float32(gpsChipCoordinates.Latitude),
-				Longitude: float32(gpsChipCoordinates.Longitude),
-				Altitude:  int32(gpsChipCoordinates.Altitude),
-			}
+			status.Gps = coord
 		}
 	}
-
-	status.Gps = coordinates
 
 	return status, nil
 }
