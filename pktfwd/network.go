@@ -48,7 +48,6 @@ type TTNClient struct {
 	connected       bool
 	networkMutex    *sync.Mutex
 	streamsMutex    *sync.Mutex
-	bootTimeMutex   *sync.Mutex
 	token           string
 	tokenExpiry     time.Time
 	frequencyPlan   string
@@ -80,9 +79,7 @@ func (c *TTNClient) GatewayID() string {
 }
 
 func (c *TTNClient) SetBootTime(t time.Time) {
-	c.bootTimeMutex.Lock()
 	c.bootTime = &t
-	c.bootTimeMutex.Unlock()
 }
 
 type RouterHealthCheck struct {
@@ -358,7 +355,6 @@ func CreateNetworkClient(ctx log.Interface, ttnConfig TTNConfig) (*TTNClient, er
 		uplinkQueue:          make(chan *router.UplinkMessage, uplinksBufferSize),
 		networkMutex:         &sync.Mutex{},
 		streamsMutex:         &sync.Mutex{},
-		bootTimeMutex:        &sync.Mutex{},
 		stopDownlinkQueue:    make(chan bool),
 		stopUplinkQueue:      make(chan bool),
 		downlinkStreamChange: make(chan bool),
@@ -437,11 +433,9 @@ func (c *TTNClient) SendUplinks(messages []router.UplinkMessage) {
 func (c *TTNClient) SendStatus(status gateway.Status) error {
 	status.Region = c.frequencyPlan
 	ctx := c.ctx
-	c.bootTimeMutex.Lock()
-	if c.bootTime != nil {
-		ctx = ctx.WithField("Uptime", time.Since(*c.bootTime))
+	if bootTime := c.bootTime; bootTime != nil {
+		ctx = ctx.WithField("Uptime", time.Since(*bootTime))
 	}
-	c.bootTimeMutex.Unlock()
 	ctx.WithFields(log.Fields{
 		"TXPacketsReceived": status.GetTxIn(),
 		"TXPacketsValid":    status.GetTxOk(),
