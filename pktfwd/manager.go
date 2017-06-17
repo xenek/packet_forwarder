@@ -58,6 +58,7 @@ func NewManager(ctx log.Interface, conf util.Config, netClient NetworkClient, ru
 
 	bootTimeSetters := NewMultipleBootTimeSetter()
 	bootTimeSetters.Add(statusMgr)
+	bootTimeSetters.Add(netClient)
 	if gpsd != nil {
 		bootTimeSetters.Add(gpsd)
 	}

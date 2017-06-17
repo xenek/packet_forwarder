@@ -4,7 +4,6 @@ package pktfwd
 
 import (
 	"context"
-	"fmt"
 	"math"
 	"sync"
 	"time"
@@ -45,7 +44,6 @@ type TTNClient struct {
 	routerConn      *grpc.ClientConn
 	ctx             log.Interface
 	uplinkStream    router.UplinkStream
-	uplinkMutex     sync.Mutex
 	downlinkStream  router.DownlinkStream
 	statusStream    router.GatewayStatusStream
 	account         *account.Account
@@ -56,6 +54,7 @@ type TTNClient struct {
 	token           string
 	tokenExpiry     time.Time
 	frequencyPlan   string
+	bootTime        *time.Time
 	// Communication between internal goroutines
 	stopDownlinkQueue          chan bool
 	stopUplinkQueue            chan bool
@@ -80,6 +79,10 @@ type NetworkClient interface {
 
 func (c *TTNClient) GatewayID() string {
 	return c.runConfig.ID
+}
+
+func (c *TTNClient) SetBootTime(t time.Time) {
+	c.bootTime = &t
 }
 
 type RouterHealthCheck struct {
@@ -353,7 +356,7 @@ func (c *TTNClient) RefreshRoutine(ctx context.Context) error {
 	}
 }
 
-func CreateNetworkClient(ctx log.Interface, ttnConfig TTNConfig) (NetworkClient, error) {
+func CreateNetworkClient(ctx log.Interface, ttnConfig TTNConfig) (*TTNClient, error) {
 	var client = &TTNClient{
 		ctx:                  ctx,
 		runConfig:            ttnConfig,
@@ -437,21 +440,17 @@ func (c *TTNClient) SendUplinks(messages []router.UplinkMessage) {
 }
 
 func (c *TTNClient) SendStatus(status gateway.Status) error {
-	var uptimeString string
 	status.Region = c.frequencyPlan
-	uptimeDuration, err := time.ParseDuration(fmt.Sprintf("%dus", status.GetTimestamp()))
-	if err == nil {
-		uptimeString = uptimeDuration.String()
-	} else {
-		uptimeString = fmt.Sprintf("%fs", float32(status.GetTimestamp())/1000000.0)
+	ctx := c.ctx
+	if bootTime := c.bootTime; bootTime != nil {
+		ctx = ctx.WithField("Uptime", time.Since(*bootTime))
 	}
-	c.ctx.WithFields(log.Fields{
+	ctx.WithFields(log.Fields{
 		"TXPacketsReceived": status.GetTxIn(),
 		"TXPacketsValid":    status.GetTxOk(),
 		"RXPacketsReceived": status.GetRxIn(),
 		"RXPacketsValid":    status.GetRxOk(),
 		"FrequencyPlan":     status.GetRegion(),
-		"Uptime":            uptimeString,
 		"Load1":             status.GetOs().GetLoad_1(),
 		"Load5":             status.GetOs().GetLoad_5(),
 		"Load15":            status.GetOs().GetLoad_15(),
@@ -462,7 +461,7 @@ func (c *TTNClient) SendStatus(status gateway.Status) error {
 		"Altitude":          status.GetGps().GetAltitude(),
 		"RTT":               status.GetRtt(),
 	}).Info("Sending status to the network server")
-	err = c.statusStream.Send(&status)
+	err := c.statusStream.Send(&status)
 	if err != nil {
 		return errors.Wrap(err, "Status stream error")
 	}
