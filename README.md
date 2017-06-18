@@ -68,7 +68,7 @@ If you encounter any problems, please check [open issues](https://github.com/The
 
 For contributing a feature, please open an issue that explains what you're working on. Work in your own fork of the repository and submit a pull request when you're done.
 
-If you want to contribute, but don't know where to start, you could have a look at issues with the label [*help wanted*](https://github.com/TheThingsNetwork/packet-forwarder/labels/help%20wanted) or [*difficulty/easy*](https://github.com/TheThingsNetwork/packet-forwarder/labels/difficulty%2Feasy).
+If you want to contribute, but don't know where to start, you could have a look at issues with the label [*easy*](https://github.com/TheThingsNetwork/packet-forwarder/labels/easy).
 
 ## <a name="license"></a>License
 
