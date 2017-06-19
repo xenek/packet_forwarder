@@ -18,8 +18,8 @@ import (
 
 const (
 	initUplinkPollingRate   = 100 * time.Microsecond
-	stableUplinkPollingRate = 5 * time.Millisecond
-	statusRoutineSleepRate  = 15 * time.Second
+	stableUplinkPollingRate = 10 * time.Millisecond
+	statusRoutineSleepRate  = 30 * time.Second
 	gpsUpdateRate           = 5 * time.Millisecond
 )
 

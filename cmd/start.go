@@ -78,7 +78,10 @@ var startCmd = &cobra.Command{
 				}
 
 				pprof.StartCPUProfile(f)
-				defer pprof.StopCPUProfile()
+				defer func() {
+					ctx.Info("Closing CPU profiling file")
+					pprof.StopCPUProfile()
+				}()
 			}
 		}
 
