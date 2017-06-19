@@ -65,6 +65,22 @@ var startCmd = &cobra.Command{
 			ctx.Warn("CRC check disabled, packets with invalid CRC will be sent upstream")
 		}
 
+		if config.GetBool("cpu-profiling.enable") {
+			cpuProfilingPath := config.GetString("cpu-profiling.path")
+			if cpuProfilingPath == "" {
+				ctx.Warn("Empty path specified for CPU profiling, disabling")
+			} else {
+				ctx.WithField("CPUProfilingPath", cpuProfilingPath).Info("Enabling CPU profiling for this run")
+				f, err := os.Create(cpuProfilingPath)
+				if err != nil {
+					ctx.WithError(err).Fatal("Couldn't create file for CPU profiling")
+				}
+
+				pprof.StartCPUProfile(f)
+				defer pprof.StopCPUProfile()
+			}
+		}
+
 		ttnConfig := &pktfwd.TTNConfig{
 			ID:                  config.GetString("id"),
 			Key:                 config.GetString("key"),
@@ -114,6 +130,9 @@ func init() {
 
 	startCmd.PersistentFlags().Bool("gpsd.enable", false, "Enable GPSD")
 	startCmd.PersistentFlags().String("gpsd.address", gpsd.DefaultAddress, "Address to the gpsd daemon")
+
+	startCmd.PersistentFlags().Bool("cpu-profiling.enable", false, "Enable CPU profiling for this run")
+	startCmd.PersistentFlags().String("cpu-profiling.path", "pktfwd.prof", "Path to the file where the CPU profiling is saved")
 
 	viper.BindPFlags(startCmd.PersistentFlags())
 
