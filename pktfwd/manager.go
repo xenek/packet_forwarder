@@ -40,7 +40,7 @@ type Manager struct {
 	downlinksSendMargin time.Duration
 }
 
-func NewManager(ctx log.Interface, conf util.Config, netClient NetworkClient, runConfig TTNConfig) *Manager {
+func NewManager(ctx log.Interface, conf util.Config, netClient *TTNClient, runConfig TTNConfig) *Manager {
 	var gpsd *gpsdGPS
 	var gps GPS
 	if runConfig.GPSDAddress != "" {
