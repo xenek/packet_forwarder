@@ -4,6 +4,7 @@ package cmd
 
 import (
 	"os"
+	"runtime/pprof"
 	"runtime/trace"
 	"strconv"
 	"time"
