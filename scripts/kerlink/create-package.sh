@@ -31,8 +31,7 @@ fi
 if [[ $(which openssl) =~ "not found" ]] ; then
     random_string="-$(< /dev/urandom tr -dc _A-Z-a-z-0-9 | head -c${1:-32};echo;)"
 else
-    random_string="-$(openssl rand -base64 15)"
-    random_string="${random_string//\/}"
+    random_string="-$(date | md5sum | grep -oh -e '[a-zA-Z0-9]*')"
 fi
 
 gatewayID="$2"
