@@ -124,7 +124,7 @@ mkdir "$release_folder"
 
 DOTA_ARCHIVE="dota_ttn-pkt-fwd$random_string.tar.gz"
 pushd "$WORKDIR" &> /dev/null
-tar -cvzf "$DOTA_ARCHIVE" "mnt" "etc" &> /dev/null
+tar -cvzf "$WORKDIR/$DOTA_ARCHIVE" "mnt" "etc" &> /dev/null
 popd &> /dev/null
 mv "$WORKDIR/$DOTA_ARCHIVE" "$release_folder"
 
