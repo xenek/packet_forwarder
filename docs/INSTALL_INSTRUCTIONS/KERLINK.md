@@ -1,8 +1,20 @@
+
 # Install the TTN Packet Forwarder on a Kerlink IoT Station
 
 *Note: for the moment, the TTN Packet Forwarder is not compatible with the Kerlink iBTS.*
 
-Before installing the TTN Packet Forwarder, we recommend **updating the Station to the latest firmware available**.
+Key observations.
+
+- Always shut down the Kerlink properly. While it has a battery and shuts down automatically when power is removed, the nandflash MTD device file system can corrupt if the internal battery is discharged after multiple long power outages with very short uptimes, as the Kerlink linux build might not have enough power for a proper shutdown. The suggested technique is to issue a shutdown now command from the terminal or through SSH.
+
+- Updating to v3.1 from 2.3.3 of the Kerlink System Firmware is a one-way process. Kerlink, on their wiki, state that attempting a downgrade to v2.3.3 after installing v3.1 can brick the device and also say "Firmware wirnet_v3.1 is mandatory to increase nandflash robustness. Once installed, older firmwares cannot be installed anymore (breaking of backward compatibility)." The key advantage of upgrading to v3.1 is use of a better flash file system - transitioning from yaffs2 to ubifs.
+
+- When running the packet forwarder temporarily or manually you typically start it running on the 8GB eMMC. This is not suitable for any mid to long term use, especially if logging or freqently writing. The recommended way to run the packet forwarder is to permanently install it to the 128MB nand flash, in the user space called /mnt/fsuser-1. The easiest way to achieve this is through creating a DOTA file using the provided TTN script, placing it in the DOTA directory using scp, and rebooting, allowing the Kerlink System Firmware to decompress, install and automatically configure it to run in the background at startup.
+
+- Copying a damaged DOTA file using scp to the DOTA directory for permanent installation can prevent the device operating properly. The Kerlink wiki details how to recover in this instance, however our best suggestion is to use ls -l to check the DOTA file size prior to copying it.   
+
+Prior to installing the TTN Packet Forwarder, we recommend **updating the Station to the latest firmware available**.
+Kerlink 
 
 + [Download and test the TTN Packet Forwarder](#download-test)
 + [Install the TTN Packet Forwarder](#install)
@@ -11,7 +23,7 @@ Before installing the TTN Packet Forwarder, we recommend **updating the Station 
 
 ## <a name="download-test"></a>Download and test the TTN Packet Forwarder
 
-*Note: Before installing the new packet forwarder, make sure you removed any other packet forwarder installed on your Kerlink IoT Station. If you don't have any important files stored on the disk, the safest way to make sure of that is to update the Station to the latest firmware available, which will reset the file system in the process.*
+*Note: Before installing the new packet forwarder, make sure you removed any other packet forwarder installed on your Kerlink IoT Station. If you don't have any important files stored on the disk, the safest way to make sure of that is to update the Station to the latest firmware available, which will reset the file system in the process. Note that a restore through pressing reset 22 times does not reset the userfs-1 file system, unlike a install from USB of the latest firmware.*
 
 1. Download the [Kerlink build](https://ttnreleases.blob.core.windows.net/packet-forwarder/master/kerlink-iot-station-pktfwd.tar.gz) of the packet forwarder.
 
@@ -34,7 +46,7 @@ $ ./packet-forwarder start
 
 This section covers permanent installation of the TTN Packet Forwarder on a Kerlink IoT Station.
 
-### Packaging the TTN Packet Forwarder
+### Packaging the TTN Packet Forwarder into a DOTA file for permanent installation
 
 Download the [Kerlink build](https://ttnreleases.blob.core.windows.net/packet-forwarder/master/kerlink-iot-station-pktfwd.tar.gz) of the packet forwarder. Execute the `create-package.sh` script with the binary inside as an argument:
 
@@ -103,7 +115,7 @@ create-kerlink-package.sh: Kerlink DOTA package complete. The package is availab
 Connect remotely to the Kerlink IoT Station, and execute these commands:
 
 ```bash
-$ cd /mnt/fsuser-1/ttn-packet-forwarder
+$ cd /mnt/fsuser-1/ttn-pkt-fwd
 $ ./ttn-pkt-fwd configure config.yml
 # Following the instructions of the wizard
 [...]
@@ -115,3 +127,11 @@ $ reboot
 #### I'm getting a "Concentrator boot time computation error: Absurd uptime received by the concentrator" error when starting the packet forwarder.
 
 The concentrator sometimes sends absurd uptime values to the packet forwarder, often because it hasn't been stopped properly. Restart the packet forwarder until this error disappears.
+
+#### Running the binary (not the DOTA) manually gives an error "x509: failed to load system roots and no roots provided"
+
+The packet forwarder when manually run needs a current SSL certificate. Use cd /etc/ssl/certs to enter the correct directory. Use wget https://letsencrypt.org/certs/lets-encrypt-x3-cross-signed.pem.txt to fetch the certificate.
+
+#### I can't use wget to fetch any files directly from the internet on the Kerlink
+
+Use vi to edit /etc/sysconfig/network and disable the firewall. Also, consider changing the DNS servers. Google's are 8.8.8.8 and 8.8.4.4. A restart through the reboot command is required after these changes.
